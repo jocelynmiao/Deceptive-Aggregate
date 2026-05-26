@@ -55,3 +55,19 @@ body {
       color: #777;
       margin-top: 10px;
     }
+
+    .slide-layout {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      align-items: stretch;
+    }
+
+    .text-panel {
+      width: 100%;
+    }
+
+    #map {
+      width: 100%;
+      min-height: 600px;
+    }
