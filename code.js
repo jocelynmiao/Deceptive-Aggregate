@@ -14,7 +14,7 @@ const slides = [
         content: `
           <div class="slide-layout">
             <div class="text-panel">
-              <h3>Historical Global Average (1850-2014)</h3>
+              <h3>Historical Average Temperature by Country(1850-2014)</h3>
               <p>subheader placeholder</p>
               <input id="year-slider" type="range" min="1850" max="2014" step="1" value="1900">
               <div>Year: <span id="year-label">1900</span></div>
