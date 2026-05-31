@@ -1,18 +1,19 @@
-let historicalData = null;
-let projectedData = null;
-let geoDataGlobal = null;
+let historicalData    = null;
+let projectedData     = null;
+let geoDataGlobal     = null;
 let climateDataGlobal = null;
-let currentYear = 1900;
+let currentYear       = 1900;
+let currentSlide      = 0;
 
-const tooltip = d3.select("body").append("div")
-  .style("position", "absolute")
-  .style("background", "#fff")
-  .style("border", "1px solid #ccc")
-  .style("padding", "5px 10px")
-  .style("font-size", "0.82em")
-  .style("pointer-events", "none")
-  .style("display", "none");
+const tooltip = d3.select("#d3-tooltip");
 
+function showTip(event, html) {
+  tooltip.style("display", "block")
+    .style("left",  (event.clientX + 14) + "px")
+    .style("top",   (event.clientY - 36) + "px")
+    .html(html);
+}
+function hideTip() { tooltip.style("display", "none"); }
 
 function aggregateByYear(rows) {
   const byYear = d3.group(rows, d => +d.year);
@@ -25,25 +26,39 @@ function aggregateByYear(rows) {
 const slides = [
   {
     label: "Introduction",
-    content: `      
+    content: `
       <div class="slide-layout">
         <div class="text-panel">
-          <h3>Average Global Temperature (1850 – 2014)</h3>
-          <input id="year-slider" type="range" min="1850" max="2014" step="1" value="1900">
-          <div>Year: <span id="year-label">1900</span></div>
+          <h3>Slide 01 — The Aggregate</h3>
+          <h2>Average Global<br>Temperature</h2>
+          <p>Climate change is often presented on a global scale ...</p>
+          <div style="margin-top:20px;">
+            <input id="year-slider" type="range" min="1850" max="2014" step="1" value="1900">
+            <div class="year-display" id="year-label">1900</div>
+          </div>
+          <div id="globe-temp-readout" style="margin-top:16px;font-family:var(--font-ui);font-size:0.8rem;color:var(--muted);">
+            Hover the map for the global average
+          </div>
+          <div class="colorbar-wrap" style="margin-top:24px;">
+            <span>0°C</span>
+            <div class="colorbar"></div>
+            <span>30°C</span>
+          </div>
         </div>
         <div id="map"></div>
-      </div > `,
-
-    annotation: "Climate change is often presented on a global scale ..."
+      </div>`
   },
   {
-    label: "Slide 2",
+    label: "Global Temperature Trend",
     content: `
-      <h1> Global Mean Surface Temperature</h1>
-      <div id="controls">
-        <button id="btn-project">Show Projected (SSP5-8.5)</button>
-        <button id="btn-reset" disabled>Reset</button>
+      <div class="chart-header">
+        <h3>Slide 02 — Historical Record &amp; Projections</h3>
+        <h1>Global Mean Surface Temperature</h1>
+        <p class="chart-subhead">... and our projections of the future often display this single metric. After all, doesn't this projection look intimidating?</p>
+      </div>
+      <div id="chart-controls">
+        <button class="chart-btn" id="btn-project">+ Show Projected (SSP5-8.5)</button>
+        <button class="chart-btn secondary" id="btn-reset" disabled>Reset to Historical</button>
       </div>
       <div id="chart"></div>
       <div id="legend">
@@ -51,66 +66,189 @@ const slides = [
         <span id="legend-proj" style="display:none">
           <span class="legend-swatch" style="background:#c0392b"></span>Projected SSP5-8.5
         </span>
-      </div>`,
-    annotation: "... and our projections of the future often display this single metric. After all, doesn't this projection look intimidating?"
-  },
+      </div>`
+    },
   {
-    label: "Slide 3",
+    label: "Country-Level Breakdown",
     content: `
-  <div class="slide-layout">
+      <div class="slide-layout">
         <div class="text-panel">
-          <h3>Historical Average Temperature by Country (1850–2014)</h3>
-          <p>Subheader placeholder</p>
-          <input id="year-slider" type="range" min="1850" max="2014" step="1" value="1900">
-          <div>Year: <span id="year-label">1900</span></div>
+          <h3>Slide 03 — Geographic Disaggregation</h3>
+          <h2>Average Temperature<br>by Country</h2>
+          <p>But a lot can be revealed by looking at the country-level data. Move the slider ... etc</p>
+          <div style="margin-top:20px;">
+            <input id="year-slider" type="range" min="1850" max="2014" step="1" value="1900">
+            <div class="year-display" id="year-label">1900</div>
+          </div>
+          <div class="colorbar-wrap" style="margin-top:28px;">
+            <span>0°C</span>
+            <div class="colorbar"></div>
+            <span>30°C</span>
+          </div>
         </div>
         <div id="map"></div>
-      </div > `,
-    annotation: "But a lot can be revealed by looking at the country-level data"
-  },
+      </div>`
+    },
   {
-    label: "Slide 4",
-    content: "text here",
-    annotation: "slide notes"
-  },
+    label: "Other map here",
+    content: `
+      <div class="text-slide">
+        <p class="eyebrow">Slide 04 — Another map</p>
+        <h1>Another map is going here</h1>
+        <p class="lead">title</p>
+        <p>will add the map thing here</p>
+      </div>`
+    },
   {
-    label: "Slide 5",
-    content: "text here",
-    annotation: "slide notes"
-  }
+    label: "Conclusion",
+    content: `
+      <div class="text-slide">
+        <p class="eyebrow">Slide 05 — Conclusion</p>
+        <h1>Add more maps / visuals / conclusion slide</h1>
+        <p class="lead">title</p>
+        <p>text</p>
+      </div>`
+    }
 ];
 
-let currentSlide = 0;
-
-function render() {
+function render(direction = 1) {
   const slide = slides[currentSlide];
+
+  // Header
   document.getElementById("slide-label").textContent = slide.label;
-  document.getElementById("content").innerHTML = slide.content;
-  document.getElementById("annotation").innerHTML = slide.annotation;
+
+  // Progress bar
+  const pct = ((currentSlide) / (slides.length - 1)) * 100;
+  document.getElementById("progress-bar-fill").style.width = pct + "%";
+
+  // Nav buttons
   document.getElementById("prev-btn").disabled = currentSlide === 0;
   document.getElementById("next-btn").disabled = currentSlide === slides.length - 1;
-  document.getElementById("progress").textContent = `Slide ${currentSlide + 1} of ${slides.length} `;
 
-  if (slide.label === "Introduction") slideOneMap();
-  if (slide.label === "Slide 2") slideTwoChart();
-  if (slide.label === "Slide 3") slideThreeMap();
+  // Slide content with enter animation
+  const contentEl = document.getElementById("content");
+  contentEl.classList.remove("visible");
+  contentEl.style.transform = `translateX(${direction > 0 ? "40px" : "-40px"})`;
+
+  // Short delay so browser registers the class removal before re-adding
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      contentEl.innerHTML = slide.content;
+      contentEl.style.transform = "";
+      contentEl.classList.add("visible");
+
+      // Mount charts/maps after DOM is ready
+      if (slide.label === "Introduction")          slideOneMap();
+      if (slide.label === "Global Temperature Trend") slideTwoChart();
+      if (slide.label === "Country-Level Breakdown")  slideThreeMap();
+    });
+  });
 }
 
 function changeSlide(dir) {
   currentSlide = Math.max(0, Math.min(slides.length - 1, currentSlide + dir));
-  render();
+  render(dir);
 }
 
-render();
+render(1);
 document.getElementById("prev-btn").addEventListener("click", () => changeSlide(-1));
 document.getElementById("next-btn").addEventListener("click", () => changeSlide(1));
 
-//SLIDE 2
+// Keyboard navigation
+window.addEventListener("keydown", e => {
+  if (e.key === "ArrowRight" || e.key === "ArrowDown") changeSlide(1);
+  if (e.key === "ArrowLeft"  || e.key === "ArrowUp")   changeSlide(-1);
+});
+
+
+// Slide 1
+let globalDataState = { averageTemperature: null };
+
+async function slideOneMap() {
+  d3.select("#map").html("");
+
+  // Reuse the shared geo + climate cache
+  if (!geoDataGlobal || !climateDataGlobal) {
+    [geoDataGlobal, climateDataGlobal] = await Promise.all([
+      d3.json("data/world.geojson"),
+      d3.csv("data/yearly_country_temp_historical.csv")
+    ]);
+  }
+
+  initMapOne();
+  updateMapOne(currentYear);
+
+  const slider = document.getElementById("year-slider");
+  const label  = document.getElementById("year-label");
+  if (slider && label) {
+    label.textContent = currentYear;
+    slider.value = currentYear;
+    // oninput replaces any previous listener since it overwrites the property
+    slider.oninput = e => {
+      currentYear = +e.target.value;
+      label.textContent = currentYear;
+      updateMapOne(currentYear);
+    };
+  }
+}
+
+function initMapOne() {
+  d3.select("#map svg").remove();
+
+  const mapEl = document.getElementById("map");
+  const w = mapEl.clientWidth  || 680;
+  const h = mapEl.clientHeight || 460;
+
+  const svg = d3.select("#map").append("svg")
+    .attr("viewBox", `0 0 ${w} ${h}`)
+    .attr("width", "100%").attr("height", "100%");
+
+  const proj = d3.geoNaturalEarth1()
+    .scale(w / 5.2)
+    .translate([w / 2, h / 2]);
+
+  // Single unified path — no internal borders
+  svg.append("path")
+    .datum(geoDataGlobal)
+    .attr("class", "global-landmass")
+    .attr("d", d3.geoPath(proj))
+    .attr("stroke", "none")
+    .attr("fill", "rgba(255,255,255,0.06)")
+    .on("mousemove", event => {
+      const t = globalDataState.averageTemperature;
+      // Also update the in-slide readout
+      const readout = document.getElementById("globe-temp-readout");
+      if (readout) readout.textContent = t != null
+        ? `Global average: ${t.toFixed(2)} °C`
+        : "No data for this year";
+      showTip(event,
+        `<strong>Global Average</strong>${t != null ? t.toFixed(2) + " °C" : "No data"}`);
+    })
+    .on("mouseleave", () => {
+      hideTip();
+    });
+}
+
+function updateMapOne(year) {
+  const yearData   = climateDataGlobal.filter(d => +d.year === year);
+  const validTemps = yearData.map(d => +d.mean_temp).filter(t => !isNaN(t));
+  const avg        = validTemps.length > 0
+    ? validTemps.reduce((s, t) => s + t, 0) / validTemps.length
+    : null;
+
+  globalDataState.averageTemperature = avg;
+
+  const colorOne = d3.scaleSequential().domain([0, 30]).interpolator(d3.interpolateReds);
+
+  d3.select("#map svg .global-landmass")
+    .transition().duration(120)
+    .attr("fill", avg == null ? "rgba(255,255,255,0.06)" : colorOne(avg));
+}
+
+//slide 2
 async function slideTwoChart() {
-  // Clear whatever was there on a previous visit
   d3.select("#chart").html("");
 
-  // Load CSVs once, cache results
   if (!historicalData) {
     const rows = await d3.csv("data/yearly_global_temp_historical.csv");
     historicalData = aggregateByYear(rows);
@@ -120,106 +258,112 @@ async function slideTwoChart() {
     projectedData = aggregateByYear(rows);
   }
 
-  // Tag each point so drawBars can tell them apart without a fragile .includes()
   historicalData.forEach(d => d.type = "historical");
-  projectedData.forEach(d => d.type = "projected");
+  projectedData.forEach(d =>  d.type = "projected");
 
-  const margin = { top: 20, right: 30, bottom: 40, left: 55 };
-  const totalW = 900, totalH = 420;
+  const margin = { top: 16, right: 24, bottom: 38, left: 56 };
+  const totalW = 900, totalH = 340;
   const W = totalW - margin.left - margin.right;
-  const H = totalH - margin.top - margin.bottom;
+  const H = totalH - margin.top  - margin.bottom;
 
   const svg = d3.select("#chart").append("svg")
-    .attr("viewBox", `0 0 ${totalW} ${totalH} `)
-    .attr("width", "100%");
+    .attr("viewBox", `0 0 ${totalW} ${totalH}`)
+    .attr("width", "100%")
+    .style("overflow", "visible");
 
   const g = svg.append("g")
-    .attr("transform", `translate(${margin.left}, ${margin.top})`);
+    .attr("transform", `translate(${margin.left},${margin.top})`);
 
   let allData = [...historicalData];
 
   const x = d3.scaleBand()
     .domain(allData.map(d => d.year))
-    .range([0, W]).padding(0.25);
+    .range([0, W]).padding(0.2);
 
   const y = d3.scaleLinear()
     .domain([d3.min(allData, d => d.temp) - 0.2, d3.max(allData, d => d.temp) + 0.3])
     .range([H, 0]);
+
+  // Diverging colour: cool blues → warm reds
   const colorScale = d3.scaleDiverging()
     .domain([d3.min(allData, d => d.temp), 0, d3.max(allData, d => d.temp)])
     .interpolator(t => d3.interpolateRdBu(1 - t));
 
-  const gridG = g.append("g").attr("class", "grid");
-  const xAxisG = g.append("g").attr("class", "axis").attr("transform", `translate(0, ${H})`);
+  const gridG  = g.append("g").attr("class", "grid");
+  const xAxisG = g.append("g").attr("class", "axis").attr("transform", `translate(0,${H})`);
   const yAxisG = g.append("g").attr("class", "axis");
 
   function updateGrid(yScale) {
-    gridG.call(d3.axisLeft(yScale).tickSize(-W).tickFormat(""));
+    gridG.call(d3.axisLeft(yScale).tickSize(-W).tickFormat(""))
+      .selectAll("line").attr("stroke", "rgba(255,255,255,0.06)");
+    gridG.select(".domain").remove();
   }
 
   function renderAxes() {
-    const tickYears = x.domain().filter(year => year % 20 === 0);
-
+    const tickYears = x.domain().filter(y => y % 20 === 0);
     xAxisG.call(
-      d3.axisBottom(x)
-        .tickValues(tickYears)
-        .tickFormat(d3.format("d"))
+      d3.axisBottom(x).tickValues(tickYears).tickFormat(d3.format("d"))
     );
-
     yAxisG.call(
-      d3.axisLeft(y)
-        .ticks(6)
-        .tickFormat(d => `${d.toFixed(1)}°C`)
+      d3.axisLeft(y).ticks(6).tickFormat(d => `${d >= 0 ? "+" : ""}${d.toFixed(1)}°C`)
     );
+    // Style axis lines
+    xAxisG.selectAll("line, path").attr("stroke", "rgba(255,255,255,0.15)");
+    yAxisG.selectAll("line, path").attr("stroke", "rgba(255,255,255,0.15)");
+    xAxisG.selectAll("text").attr("fill", "#7a7870");
+    yAxisG.selectAll("text").attr("fill", "#7a7870");
   }
 
   updateGrid(y);
   renderAxes();
 
+  // Y-axis label
   g.append("text")
     .attr("transform", "rotate(-90)")
-    .attr("y", -50).attr("x", -H / 2)
+    .attr("y", -48).attr("x", -H / 2)
     .attr("text-anchor", "middle")
-    .style("font-size", "11px").style("fill", "#555")
+    .attr("fill", "#7a7870")
+    .style("font-size", "10px")
     .text("Anomaly vs. 1850–1900 baseline (°C)");
 
+  // Zero line
   const zeroline = g.append("line")
     .attr("x1", 0).attr("x2", W)
     .attr("y1", y(0)).attr("y2", y(0))
-    .attr("stroke", "#999").attr("stroke-dasharray", "4,3").attr("stroke-width", 1);
+    .attr("stroke", "rgba(255,255,255,0.3)")
+    .attr("stroke-dasharray", "4,3")
+    .attr("stroke-width", 1);
 
   function drawBars(data, animate) {
     const bars = g.selectAll(".bar").data(data, d => d.year);
 
     bars.enter().append("rect")
-      .attr("class", d => `bar bar - ${d.type} `)
-      .attr("fill", d => colorScale(d.temp))
-      .attr("x", d => x(d.year))
-      .attr("width", x.bandwidth())
-      .attr("y", H).attr("height", 0)
-      .on("mousemove", (event, d) => {
-        tooltip.style("display", "block")
-          .style("left", (event.pageX + 12) + "px")
-          .style("top", (event.pageY - 28) + "px")
-          .html(`<strong> ${d.year}</strong> <br>+${d.temp.toFixed(2)} °C`);
-      })
-      .on("mouseleave", () => tooltip.style("display", "none"))
+      .attr("class", d => `bar bar-${d.type}`)
+      .attr("fill",   d => colorScale(d.temp))
+      .attr("x",      d => x(d.year))
+      .attr("width",  x.bandwidth())
+      .attr("y",      H)
+      .attr("height", 0)
+      .on("mousemove", (event, d) => showTip(event,
+        `<strong>${d.year}</strong>${d.temp >= 0 ? "+" : ""}${d.temp.toFixed(2)} °C anomaly`))
+      .on("mouseleave", hideTip)
       .transition()
-      .duration(animate ? 600 : 400)
-      .delay((_, i) => animate ? i * 5 : 0)
-      .attr("y", d => d.temp >= 0 ? y(d.temp) : y(0))
-      .attr("height", d => Math.abs(y(d.temp) - y(0)));
+        .duration(animate ? 600 : 350)
+        .delay((_, i) => animate ? i * 4 : 0)
+        .attr("y",      d => d.temp >= 0 ? y(d.temp) : y(0))
+        .attr("height", d => Math.abs(y(d.temp) - y(0)));
 
-    // Rescale existing bars
     bars.transition().duration(500)
-      .attr("x", d => x(d.year)).attr("width", x.bandwidth())
-      .attr("fill", d => colorScale(d.temp))
-      .attr("y", d => d.temp >= 0 ? y(d.temp) : y(0))
+      .attr("x",      d => x(d.year))
+      .attr("width",  x.bandwidth())
+      .attr("fill",   d => colorScale(d.temp))
+      .attr("y",      d => d.temp >= 0 ? y(d.temp) : y(0))
       .attr("height", d => Math.abs(y(d.temp) - y(0)));
   }
 
   drawBars(historicalData, false);
 
+  //  Project button 
   document.getElementById("btn-project").addEventListener("click", function () {
     this.disabled = true;
     document.getElementById("btn-reset").disabled = false;
@@ -229,21 +373,21 @@ async function slideTwoChart() {
     x.domain(allData.map(d => d.year));
     y.domain([d3.min(allData, d => d.temp) - 0.2, d3.max(allData, d => d.temp) + 0.3]);
 
-    const tickYears = x.domain().filter(year => year % 20 === 0);
+    const tickYears = x.domain().filter(yr => yr % 20 === 0);
     xAxisG.transition().duration(500)
-      .call(
-        d3.axisBottom(x)
-          .tickValues(tickYears)
-          .tickFormat(d3.format("d"))
-      );
-    yAxisG.transition().duration(500).call(
-      d3.axisLeft(y).ticks(6).tickFormat(d => `+${d.toFixed(1)}°C`)
-    );
+      .call(d3.axisBottom(x).tickValues(tickYears).tickFormat(d3.format("d")));
+    yAxisG.transition().duration(500)
+      .call(d3.axisLeft(y).ticks(6).tickFormat(d => `${d >= 0 ? "+" : ""}${d.toFixed(1)}°C`));
+    xAxisG.selectAll("line, path").attr("stroke", "rgba(255,255,255,0.15)");
+    yAxisG.selectAll("line, path").attr("stroke", "rgba(255,255,255,0.15)");
+    xAxisG.selectAll("text").attr("fill", "#7a7870");
+    yAxisG.selectAll("text").attr("fill", "#7a7870");
     updateGrid(y);
     zeroline.transition().duration(500).attr("y1", y(0)).attr("y2", y(0));
     drawBars(allData, true);
   });
 
+  //  Reset button 
   document.getElementById("btn-reset").addEventListener("click", function () {
     this.disabled = true;
     document.getElementById("btn-project").disabled = false;
@@ -259,16 +403,15 @@ async function slideTwoChart() {
     y.domain([d3.min(allData, d => d.temp) - 0.2, d3.max(allData, d => d.temp) + 0.3]);
 
     setTimeout(() => {
-      const tickYears = x.domain().filter(year => year % 20 === 0);
+      const tickYears = x.domain().filter(yr => yr % 20 === 0);
       xAxisG.transition().duration(500)
-        .call(
-          d3.axisBottom(x)
-            .tickValues(tickYears)
-            .tickFormat(d3.format("d"))
-        );
-      yAxisG.transition().duration(400).call(
-        d3.axisLeft(y).ticks(6).tickFormat(d => `+${d.toFixed(1)}°C`)
-      );
+        .call(d3.axisBottom(x).tickValues(tickYears).tickFormat(d3.format("d")));
+      yAxisG.transition().duration(400)
+        .call(d3.axisLeft(y).ticks(6).tickFormat(d => `${d >= 0 ? "+" : ""}${d.toFixed(1)}°C`));
+      xAxisG.selectAll("line, path").attr("stroke", "rgba(255,255,255,0.15)");
+      yAxisG.selectAll("line, path").attr("stroke", "rgba(255,255,255,0.15)");
+      xAxisG.selectAll("text").attr("fill", "#7a7870");
+      yAxisG.selectAll("text").attr("fill", "#7a7870");
       updateGrid(y);
       zeroline.transition().duration(400).attr("y1", y(0)).attr("y2", y(0));
       drawBars(historicalData, false);
@@ -276,8 +419,7 @@ async function slideTwoChart() {
   });
 }
 
-
-//SLIDE 3
+// Slide 3
 async function slideThreeMap() {
   d3.select("#map").html("");
 
@@ -290,9 +432,8 @@ async function slideThreeMap() {
 
   createMapThree(currentYear);
 
-  // Slider: attach fresh each time (element is recreated with slide HTML)
   const slider = document.getElementById("year-slider");
-  const label = document.getElementById("year-label");
+  const label  = document.getElementById("year-label");
   label.textContent = currentYear;
   slider.value = currentYear;
 
@@ -303,28 +444,28 @@ async function slideThreeMap() {
   });
 }
 
-function createMapThree(year) {
-  const nameFixes = {
-    "The Bahamas": "Bahamas",
-    "Bosnia and Herzegovina": "Bosnia and Herz.",
-    "Brunei": "Brunei Darussalam",
-    "Central African Republic": "Central African Rep.",
-    "Ivory Coast": "Côte d'Ivoire",
-    "Democratic Republic of the Congo": "Dem. Rep. Congo",
-    "England": "United Kingdom",
-    "Republic of the Congo": "Congo",
-    "Czech Republic": "Czechia",
-    "Guinea Bissau": "Guinea-Bissau",
-    "Macedonia": "North Macedonia",
-    "Republic of Serbia": "Serbia",
-    "Swaziland": "eSwatini",
-    "East Timor": "Timor-Leste",
-    "United Republic of Tanzania": "Tanzania",
-    "USA": "United States of America"
-  };
+const nameFixes = {
+  "The Bahamas":                        "Bahamas",
+  "Bosnia and Herzegovina":             "Bosnia and Herz.",
+  "Brunei":                             "Brunei Darussalam",
+  "Central African Republic":           "Central African Rep.",
+  "Ivory Coast":                        "Côte d'Ivoire",
+  "Democratic Republic of the Congo":   "Dem. Rep. Congo",
+  "England":                            "United Kingdom",
+  "Republic of the Congo":              "Congo",
+  "Czech Republic":                     "Czechia",
+  "Guinea Bissau":                      "Guinea-Bissau",
+  "Macedonia":                          "North Macedonia",
+  "Republic of Serbia":                 "Serbia",
+  "Swaziland":                          "eSwatini",
+  "East Timor":                         "Timor-Leste",
+  "United Republic of Tanzania":        "Tanzania",
+  "USA":                                "United States of America"
+};
 
+function createMapThree(year) {
   const yearData = climateDataGlobal.filter(d => +d.year === year);
-  const tempMap = new Map(yearData.map(d => [d.country, +d.mean_temp]));
+  const tempMap  = new Map(yearData.map(d => [d.country, +d.mean_temp]));
 
   geoDataGlobal.features.forEach(d => {
     const name = nameFixes[d.properties.name] ?? d.properties.name;
@@ -337,126 +478,35 @@ function createMapThree(year) {
 function renderMapThree() {
   d3.select("#map svg").remove();
 
-  const width = 700, height = 500;
+  const mapEl = document.getElementById("map");
+  const width  = mapEl.clientWidth  || 680;
+  const height = mapEl.clientHeight || 460;
 
   const svg = d3.select("#map").append("svg")
-    .attr("width", width).attr("height", height);
+    .attr("viewBox", `0 0 ${width} ${height}`)
+    .attr("width", "100%").attr("height", "100%");
 
   const projection = d3.geoNaturalEarth1()
-    .scale(140).translate([width / 2, height / 2]);
+    .scale(width / 5.2)
+    .translate([width / 2, height / 2]);
 
-  const path = d3.geoPath(projection);
-  const color = d3.scaleSequential().domain([0, 30]).interpolator(d3.interpolateReds);
+  const path  = d3.geoPath(projection);
+  const color = d3.scaleSequential().domain([0, 30])
+    .interpolator(d3.interpolateReds);
 
   svg.selectAll("path")
     .data(geoDataGlobal.features)
     .join("path")
-    .attr("d", path)
-    .attr("fill", d => d.properties.temperature == null ? "#ccc" : color(d.properties.temperature))
-    .attr("stroke", "white")
-    .attr("stroke-width", 0.5)
+    .attr("d",            path)
+    .attr("fill",         d => d.properties.temperature == null
+      ? "rgba(255,255,255,0.06)"
+      : color(d.properties.temperature))
+    .attr("stroke",       "rgba(255,255,255,0.15)")
+    .attr("stroke-width", 0.4)
     .on("mousemove", (event, d) => {
       const t = d.properties.temperature;
-      tooltip.style("display", "block")
-        .style("left", (event.pageX + 12) + "px")
-        .style("top", (event.pageY - 28) + "px")
-        .html(`<strong>${d.properties.name}</strong><br>${t != null ? t.toFixed(1) + " °C" : "No data"}`);
+      showTip(event,
+        `<strong>${d.properties.name}</strong>${t != null ? t.toFixed(1) + " °C" : "No data"}`);
     })
-    .on("mouseleave", () => tooltip.style("display", "none"));
-}
-
-// Scope variables (ensure these are declared globally in your script)
-
- 
-
-// Ensure these variables are declared in your global script scope
-// let geoDataGlobal = null;
-// let climateDataGlobal = null;
-// let currentYear = 2023; 
-
-async function slideOneMap() {
-  d3.select("#map").html("");
-
-  if (!geoDataGlobal || !climateDataGlobal) {
-    [geoDataGlobal, climateDataGlobal] = await Promise.all([
-      d3.json("data/world.geojson"),
-      d3.csv("data/yearly_country_temp_historical.csv")
-    ]);
-  }
-
-  // 1. Initialize the single global landmass layer
-  initMapOne();
-  
-  // 2. Compute temperatures and apply the first color state
-  updateMapOne(currentYear);
-
-  const slider = document.getElementById("year-slider");
-  const label = document.getElementById("year-label");
-  
-  if (slider && label) {
-    label.textContent = currentYear;
-    slider.value = currentYear;
-
-    // Use oninput to prevent duplicating event listeners on slide transitions
-    slider.oninput = e => {
-      currentYear = +e.target.value;
-      label.textContent = currentYear;
-      updateMapOne(currentYear);
-    };
-  }
-}
-
-// Global visual configurations
-const width = 700, height = 500;
-const projection = d3.geoNaturalEarth1().scale(140).translate([width / 2, height / 2]);
-const path = d3.geoPath(projection);
-const color = d3.scaleSequential().domain([0, 30]).interpolator(d3.interpolateReds);
-
-// Global tracker to pass dynamic temperature calculations directly into the mouse tooltip
-let globalDataState = { averageTemperature: null };
-
-function initMapOne() {
-  d3.select("#map svg").remove();
-
-  const svg = d3.select("#map").append("svg")
-    .attr("width", width).attr("height", height);
-
-  // BORDERLESS FIX: Bind your entire feature collection array as a unified dataset (.datum)
-  svg.append("path")
-    .datum(geoDataGlobal) // Binds the entire GeoJSON object into a single path element
-    .attr("class", "global-landmass")
-    .attr("d", path)
-    .attr("stroke", "none") // Hides internal boundaries completely
-    .attr("fill", "#ccc")
-    .on("mousemove", (event) => {
-      const t = globalDataState.averageTemperature;
-      if (typeof tooltip !== 'undefined') {
-        tooltip.style("display", "block")
-          .style("left", (event.pageX + 12) + "px")
-          .style("top", (event.pageY - 28) + "px")
-          .html(`<strong>Global Average</strong><br>${t != null ? t.toFixed(1) + " °C" : "No data"}`);
-      }
-    })
-    .on("mouseleave", () => {
-      if (typeof tooltip !== 'undefined') tooltip.style("display", "none");
-    });
-}
-
-function updateMapOne(year) {
-  // 1. Aggregate all available records for the year into one global average value
-  const yearData = climateDataGlobal.filter(d => +d.year === year);
-  const validTemps = yearData.map(d => +d.mean_temp).filter(t => !isNaN(t));
-  
-  const globalAverage = validTemps.length > 0 
-    ? validTemps.reduce((sum, t) => sum + t, 0) / validTemps.length 
-    : null;
-
-  // 2. Cache this calculation to the tracking object for the mouseover tooltip
-  globalDataState.averageTemperature = globalAverage;
-
-  // 3. Apply color changes smoothly onto the unified world shape
-  d3.select("#map svg .global-landmass")
-    .transition()
-    .duration(120)
-    .attr("fill", globalAverage == null ? "#ccc" : color(globalAverage));
+    .on("mouseleave", hideTip);
 }
