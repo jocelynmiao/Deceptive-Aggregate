@@ -39,11 +39,10 @@ const slides = [
           <h2>Average Global<br>Temperature</h2>
           <p>Climate change is often presented on a global scale ...</p>
           <div style="margin-top:20px;">
-            <input id="year-slider" type="range" min="1850" max="2014" step="1" value="1900">
-            <div class="year-display" id="year-label">1900</div>
-          </div>
-          <div id="globe-temp-readout" style="margin-top:16px;font-family:var(--font-ui);font-size:0.8rem;color:var(--muted);">
-            Hover the map for the global average
+            <div class="year-display" id="year-label" style="font-size:2rem;font-weight:700;color:var(--accent);">1850</div>
+            <div id="globe-temp-readout" style="margin-top:8px;font-family:var(--font-ui);font-size:0.8rem;color:var(--muted);">
+              Animating through years…
+            </div>
           </div>
           <div class="colorbar-wrap" style="margin-top:24px;">
             <span>0°C</span>
@@ -344,6 +343,11 @@ function render(direction = 1) {
 }
 
 function changeSlide(dir) {
+  // Cancel any running slide-1 animation when leaving
+  if (window._slide1AnimCancel) {
+    window._slide1AnimCancel();
+    window._slide1AnimCancel = null;
+  }
   currentSlide = Math.max(0, Math.min(slides.length - 1, currentSlide + dir));
   render(dir);
 }
@@ -499,7 +503,7 @@ function updateMapOne(year) {
     .attr("fill", avg == null ? "rgba(255,255,255,0.06)" : colorOne(avg));
 }
 
-// Slide 2
+//slide 2
 
 async function slideTwoChart() {
   d3.select("#chart").html("");
@@ -532,13 +536,15 @@ async function slideTwoChart() {
   let allData = [...historicalData];
 
   const x = d3.scaleBand().domain(allData.map(d => d.year)).range([0, W]).padding(0.2);
+
+  // --- FIX: y-axis always starts at 0 ---
   const y = d3.scaleLinear()
-    .domain([d3.min(allData, d => d.temp) - 0.2, d3.max(allData, d => d.temp) + 0.3])
+    .domain([0, d3.max(allData, d => d.temp) + 0.3])
     .range([H, 0]);
 
-  const colorScale = d3.scaleDiverging()
-    .domain([d3.min(allData, d => d.temp), 0, d3.max(allData, d => d.temp)])
-    .interpolator(t => d3.interpolateRdBu(1 - t));
+  const colorScale = d3.scaleSequential()
+    .domain([d3.min(allData, d => d.temp), d3.max(allData, d => d.temp)])
+    .interpolator(d3.interpolateReds);
 
   const gridG  = g.append("g").attr("class", "grid");
   const xAxisG = g.append("g").attr("class", "axis").attr("transform", `translate(0,${H})`);
@@ -558,7 +564,7 @@ async function slideTwoChart() {
   function renderAxes() {
     const tickYears = x.domain().filter(y => y % 20 === 0);
     xAxisG.call(d3.axisBottom(x).tickValues(tickYears).tickFormat(d3.format("d")));
-    yAxisG.call(d3.axisLeft(y).ticks(6).tickFormat(d => `${d >= 0 ? "+" : ""}${d.toFixed(1)}°C`));
+    yAxisG.call(d3.axisLeft(y).ticks(6).tickFormat(d => `${d.toFixed(1)}°C`));
     styleAxes();
   }
 
@@ -568,11 +574,7 @@ async function slideTwoChart() {
   g.append("text")
     .attr("transform", "rotate(-90)").attr("y", -48).attr("x", -H / 2)
     .attr("text-anchor", "middle").attr("fill", "#7a7870").style("font-size", "10px")
-    .text("Anomaly vs. 1850–1900 baseline (°C)");
-
-  const zeroline = g.append("line")
-    .attr("x1", 0).attr("x2", W).attr("y1", y(0)).attr("y2", y(0))
-    .attr("stroke", "rgba(255,255,255,0.3)").attr("stroke-dasharray", "4,3").attr("stroke-width", 1);
+    .text("Mean Surface Temperature (°C)");
 
   function drawBars(data, animate) {
     const bars = g.selectAll(".bar").data(data, d => d.year);
@@ -583,18 +585,18 @@ async function slideTwoChart() {
       .attr("width",  x.bandwidth())
       .attr("y", H).attr("height", 0)
       .on("mousemove", (event, d) => showTip(event,
-        `<strong>${d.year}</strong>${d.temp >= 0 ? "+" : ""}${d.temp.toFixed(2)} °C anomaly`))
+        `<strong>${d.year}</strong>: ${d.temp.toFixed(2)} °C`))
       .on("mouseleave", hideTip)
       .transition()
         .duration(animate ? 600 : 350)
         .delay((_, i) => animate ? i * 4 : 0)
-        .attr("y",      d => d.temp >= 0 ? y(d.temp) : y(0))
-        .attr("height", d => Math.abs(y(d.temp) - y(0)));
+        .attr("y",      d => y(d.temp))
+        .attr("height", d => H - y(d.temp));
     bars.transition().duration(500)
       .attr("x",      d => x(d.year)).attr("width",  x.bandwidth())
       .attr("fill",   d => colorScale(d.temp))
-      .attr("y",      d => d.temp >= 0 ? y(d.temp) : y(0))
-      .attr("height", d => Math.abs(y(d.temp) - y(0)));
+      .attr("y",      d => y(d.temp))
+      .attr("height", d => H - y(d.temp));
   }
 
   drawBars(historicalData, false);
@@ -605,12 +607,13 @@ async function slideTwoChart() {
     document.getElementById("legend-proj").style.display = "inline";
     allData = [...historicalData, ...projectedData];
     x.domain(allData.map(d => d.year));
-    y.domain([d3.min(allData, d => d.temp) - 0.2, d3.max(allData, d => d.temp) + 0.3]);
+    // Keep y starting at 0, just expand the top
+    y.domain([0, d3.max(allData, d => d.temp) + 0.3]);
+    colorScale.domain([d3.min(allData, d => d.temp), d3.max(allData, d => d.temp)]);
     const tickYears = x.domain().filter(yr => yr % 20 === 0);
     xAxisG.transition().duration(500).call(d3.axisBottom(x).tickValues(tickYears).tickFormat(d3.format("d")));
-    yAxisG.transition().duration(500).call(d3.axisLeft(y).ticks(6).tickFormat(d => `${d >= 0 ? "+" : ""}${d.toFixed(1)}°C`));
+    yAxisG.transition().duration(500).call(d3.axisLeft(y).ticks(6).tickFormat(d => `${d.toFixed(1)}°C`));
     styleAxes(); updateGrid(y);
-    zeroline.transition().duration(500).attr("y1", y(0)).attr("y2", y(0));
     drawBars(allData, true);
   });
 
@@ -621,13 +624,13 @@ async function slideTwoChart() {
     g.selectAll(".bar-projected").transition().duration(300).attr("y", H).attr("height", 0).remove();
     allData = [...historicalData];
     x.domain(allData.map(d => d.year));
-    y.domain([d3.min(allData, d => d.temp) - 0.2, d3.max(allData, d => d.temp) + 0.3]);
+    y.domain([0, d3.max(allData, d => d.temp) + 0.3]);
+    colorScale.domain([d3.min(allData, d => d.temp), d3.max(allData, d => d.temp)]);
     setTimeout(() => {
       const tickYears = x.domain().filter(yr => yr % 20 === 0);
       xAxisG.transition().duration(500).call(d3.axisBottom(x).tickValues(tickYears).tickFormat(d3.format("d")));
-      yAxisG.transition().duration(400).call(d3.axisLeft(y).ticks(6).tickFormat(d => `${d >= 0 ? "+" : ""}${d.toFixed(1)}°C`));
+      yAxisG.transition().duration(400).call(d3.axisLeft(y).ticks(6).tickFormat(d => `${d.toFixed(1)}°C`));
       styleAxes(); updateGrid(y);
-      zeroline.transition().duration(400).attr("y1", y(0)).attr("y2", y(0));
       drawBars(historicalData, false);
     }, 320);
   });
@@ -707,7 +710,7 @@ async function slideFourUS() {
   buildZoomedUSMap("#us-map", false);
 }
 
-// Slide 5
+//slide 5
 
 async function slideFiveUS() {
   await ensureBaseData();
@@ -731,7 +734,221 @@ async function slideFiveUS() {
   }
 
   annotateGeoWithYear(year1);
-  buildZoomedUSMap("#us-map-5", true);
+  buildLockedUSMap("#us-map-5", true);
+}
+
+// slide 9
+
+async function slideNineUSSummer() {
+  await ensureBaseData();
+  d3.select("#us-map-9").html("");
+
+  const [histRows, projRows] = await Promise.all([
+    ensureSeasonalData("us", "historical"),
+    ensureSeasonalData("us", "ssp245"),
+  ]);
+
+  const summer0  = lookupSeasonalTemp(histRows, 1850, "summer");
+  const projYears = [...new Set(projRows.filter(r => r.season === "summer").map(r => +r.year))].sort((a,b) => b-a);
+  const latestYr  = projYears[0] || 2100;
+  const summerN   = lookupSeasonalTemp(projRows, latestYr, "summer");
+
+  setText("us-summer-1850",  summer0, "°C");
+  setText("us-summer-latest", summerN, `°C (${latestYr})`);
+
+  const elDelta = document.getElementById("us-summer-delta");
+  if (elDelta && summer0 != null && summerN != null) {
+    const d = summerN - summer0;
+    elDelta.textContent = `+${d.toFixed(2)}°C`;
+  }
+
+  await paintUSSeasonMapLocked("#us-map-9", "summer", "historical", 2014);
+}
+
+// used by slide 8 map
+
+async function paintUSSeasonMap(containerSelector, season, scenario, year) {
+  const rows = await ensureSeasonalData("country", scenario);
+  const tempMap = buildSeasonalTempMap(rows, year, season);
+
+  geoDataGlobal.features.forEach(f => {
+    const name = nameFixes[f.properties.name] ?? f.properties.name;
+    f.properties.temperature = tempMap.get(name) ?? null;
+  });
+
+  const container = document.querySelector(containerSelector);
+  if (!container) return;
+
+  const width  = container.clientWidth  || 700;
+  const height = container.clientHeight || 500;
+
+  const color = season === "winter"
+    ? d3.scaleSequential().domain([-15, 20]).interpolator(d3.interpolateBlues)
+    : d3.scaleSequential().domain([5, 40]).interpolator(d3.interpolateOrRd);
+
+  const svg = d3.select(containerSelector).append("svg")
+    .attr("viewBox", `0 0 ${width} ${height}`)
+    .attr("width", "100%").attr("height", "100%");
+
+  const projection = d3.geoNaturalEarth1().scale(width / 5.2).translate([width / 2, height / 2]);
+  const path = d3.geoPath(projection);
+
+  const countries = svg.selectAll("path")
+    .data(geoDataGlobal.features)
+    .join("path")
+    .attr("d", path)
+    .attr("fill", f => f.properties.temperature == null
+      ? "rgba(255,255,255,0.06)"
+      : color(f.properties.temperature))
+    .attr("stroke", "#222").attr("stroke-width", 0.4).attr("opacity", 0.7)
+    .on("mousemove", (event, f) => {
+      const t = f.properties.temperature;
+      const lbl = season === "winter" ? "Winter" : "Summer";
+      showTip(event, `<strong>${f.properties.name}</strong>${t != null ? `${lbl}: ${t.toFixed(1)} °C` : "No data"}`);
+    })
+    .on("mouseleave", hideTip);
+
+  const usFeature = geoDataGlobal.features.find(
+    f => f.properties.name === "USA" || f.properties.name === "United States of America"
+  );
+  if (!usFeature) return;
+
+  const targetProj = d3.geoNaturalEarth1();
+  targetProj.fitSize([width * 0.85, height * 0.85], usFeature);
+
+  countries.transition().duration(2000).ease(d3.easeCubicInOut)
+    .tween("zoomToUS", () => {
+      const iS = d3.interpolate(projection.scale(),     targetProj.scale());
+      const iT = d3.interpolate(projection.translate(), targetProj.translate());
+      return t => { projection.scale(iS(t)).translate(iT(t)); countries.attr("d", path); };
+    });
+
+  countries.transition().delay(1600).duration(700)
+    .attr("opacity", f => isUS(f) ? 1 : 0.06)
+    .attr("stroke",  f => isUS(f) ? "white" : "#222")
+    .attr("stroke-width", f => isUS(f) ? 1.5 : 0.3);
+}
+
+// used by slide 9 to keep zoomed on the US
+
+async function paintUSSeasonMapLocked(containerSelector, season, scenario, year) {
+  const rows = await ensureSeasonalData("country", scenario);
+  const tempMap = buildSeasonalTempMap(rows, year, season);
+
+  geoDataGlobal.features.forEach(f => {
+    const name = nameFixes[f.properties.name] ?? f.properties.name;
+    f.properties.temperature = tempMap.get(name) ?? null;
+  });
+
+  const container = document.querySelector(containerSelector);
+  if (!container) return;
+
+  const width  = container.clientWidth  || 700;
+  const height = container.clientHeight || 500;
+
+  const color = season === "winter"
+    ? d3.scaleSequential().domain([-15, 20]).interpolator(d3.interpolateBlues)
+    : d3.scaleSequential().domain([5, 40]).interpolator(d3.interpolateOrRd);
+
+  const usFeature = geoDataGlobal.features.find(isUS);
+  if (!usFeature) return;
+
+  // Start projection already fitted to the US — no zoom animation
+  const projection = d3.geoNaturalEarth1();
+  projection.fitSize([width * 0.85, height * 0.85], usFeature);
+  // Centre it nicely
+  projection.translate([
+    projection.translate()[0] + width  * 0.075,
+    projection.translate()[1] + height * 0.075,
+  ]);
+
+  const path = d3.geoPath(projection);
+
+  const svg = d3.select(containerSelector).append("svg")
+    .attr("viewBox", `0 0 ${width} ${height}`)
+    .attr("width", "100%").attr("height", "100%");
+
+  svg.selectAll("path")
+    .data(geoDataGlobal.features)
+    .join("path")
+    .attr("d", path)
+    .attr("fill", f => {
+      if (!isUS(f)) return "rgba(255,255,255,0.04)";
+      return f.properties.temperature == null
+        ? "rgba(255,255,255,0.06)"
+        : color(f.properties.temperature);
+    })
+    .attr("stroke",       f => isUS(f) ? "rgba(255,255,255,0.7)" : "#222")
+    .attr("stroke-width", f => isUS(f) ? 1.5 : 0.3)
+    .attr("opacity",      f => isUS(f) ? 0 : 0.04)
+    .on("mousemove", (event, f) => {
+      if (!isUS(f)) return;
+      const t = f.properties.temperature;
+      const lbl = season === "winter" ? "Winter" : "Summer";
+      showTip(event, `<strong>${f.properties.name}</strong>${t != null ? `${lbl}: ${t.toFixed(1)} °C` : "No data"}`);
+    })
+    .on("mouseleave", hideTip)
+    // Fade the US in
+    .filter(isUS)
+    .transition().duration(800)
+    .attr("opacity", 1);
+}
+
+// used by slide 5 to stay on zoomed map 
+
+function buildLockedUSMap(containerSelector, highlight) {
+  const container = document.querySelector(containerSelector);
+  if (!container) return;
+
+  const width  = container.clientWidth  || 700;
+  const height = container.clientHeight || 500;
+  const color  = d3.scaleSequential().domain([0, 30]).interpolator(d3.interpolateReds);
+
+  const usFeature = geoDataGlobal.features.find(isUS);
+  if (!usFeature) return;
+
+  // Fit projection directly to US — no pan animation
+  const projection = d3.geoNaturalEarth1();
+  projection.fitSize([width * 0.85, height * 0.85], usFeature);
+  projection.translate([
+    projection.translate()[0] + width  * 0.075,
+    projection.translate()[1] + height * 0.075,
+  ]);
+
+  const path = d3.geoPath(projection);
+
+  const svg = d3.select(containerSelector).append("svg")
+    .attr("viewBox", `0 0 ${width} ${height}`)
+    .attr("width", "100%").attr("height", "100%");
+
+  // Faded world context
+  svg.selectAll("path.bg-country")
+    .data(geoDataGlobal.features.filter(f => !isUS(f)))
+    .join("path")
+    .attr("class", "bg-country")
+    .attr("d", path)
+    .attr("fill", f => f.properties.temperature == null ? "#1a1a1a" : color(f.properties.temperature))
+    .attr("stroke", "#111").attr("stroke-width", 0.3)
+    .attr("opacity", 0.06);
+
+  // US — highlighted
+  svg.append("path")
+    .datum(usFeature)
+    .attr("d", path)
+    .attr("fill", highlight ? "var(--red)" : (f => {
+      const t = usFeature.properties.temperature;
+      return t != null ? color(t) : "var(--accent)";
+    }))
+    .attr("stroke", "rgba(255,255,255,0.6)")
+    .attr("stroke-width", 1.8)
+    .attr("opacity", 0)
+    .on("mousemove", event => {
+      const t = usFeature.properties.temperature;
+      showTip(event, `<strong>United States</strong>${t != null ? t.toFixed(1) + " °C" : "No data"}`);
+    })
+    .on("mouseleave", hideTip)
+    .transition().delay(100).duration(700)
+    .attr("opacity", 1);
 }
 
 // Slide 7
@@ -870,96 +1087,6 @@ async function slideEightUSWinter() {
   await paintUSSeasonMap("#us-map-8", "winter", "historical", 2014);
 }
 
-// Slide 9
-
-async function slideNineUSSummer() {
-  await ensureBaseData();
-  d3.select("#us-map-9").html("");
-
-  const [histRows, projRows] = await Promise.all([
-    ensureSeasonalData("us", "historical"),
-    ensureSeasonalData("us", "ssp245"),
-  ]);
-
-  const summer0  = lookupSeasonalTemp(histRows, 1850, "summer");
-  const projYears = [...new Set(projRows.filter(r => r.season === "summer").map(r => +r.year))].sort((a,b) => b-a);
-  const latestYr  = projYears[0] || 2100;
-  const summerN   = lookupSeasonalTemp(projRows, latestYr, "summer");
-
-  setText("us-summer-1850",  summer0, "°C");
-  setText("us-summer-latest", summerN, `°C (${latestYr})`);
-
-  const elDelta = document.getElementById("us-summer-delta");
-  if (elDelta && summer0 != null && summerN != null) {
-    const d = summerN - summer0;
-    elDelta.textContent = `+${d.toFixed(2)}°C`;
-  }
-
-  await paintUSSeasonMap("#us-map-9", "summer", "historical", 2014);
-}
-
-async function paintUSSeasonMap(containerSelector, season, scenario, year) {
-  const rows = await ensureSeasonalData("country", scenario);
-  const tempMap = buildSeasonalTempMap(rows, year, season);
-
-  geoDataGlobal.features.forEach(f => {
-    const name = nameFixes[f.properties.name] ?? f.properties.name;
-    f.properties.temperature = tempMap.get(name) ?? null;
-  });
-
-  const container = document.querySelector(containerSelector);
-  if (!container) return;
-
-  const width  = container.clientWidth  || 700;
-  const height = container.clientHeight || 500;
-
-  const color = season === "winter"
-    ? d3.scaleSequential().domain([-15, 20]).interpolator(d3.interpolateBlues)
-    : d3.scaleSequential().domain([5, 40]).interpolator(d3.interpolateOrRd);
-
-  const svg = d3.select(containerSelector).append("svg")
-    .attr("viewBox", `0 0 ${width} ${height}`)
-    .attr("width", "100%").attr("height", "100%");
-
-  const projection = d3.geoNaturalEarth1().scale(width / 5.2).translate([width / 2, height / 2]);
-  const path = d3.geoPath(projection);
-
-  const countries = svg.selectAll("path")
-    .data(geoDataGlobal.features)
-    .join("path")
-    .attr("d", path)
-    .attr("fill", f => f.properties.temperature == null
-      ? "rgba(255,255,255,0.06)"
-      : color(f.properties.temperature))
-    .attr("stroke", "#222").attr("stroke-width", 0.4).attr("opacity", 0.7)
-    .on("mousemove", (event, f) => {
-      const t = f.properties.temperature;
-      const lbl = season === "winter" ? "Winter" : "Summer";
-      showTip(event, `<strong>${f.properties.name}</strong>${t != null ? `${lbl}: ${t.toFixed(1)} °C` : "No data"}`);
-    })
-    .on("mouseleave", hideTip);
-
-  const usFeature = geoDataGlobal.features.find(
-    f => f.properties.name === "USA" || f.properties.name === "United States of America"
-  );
-  if (!usFeature) return;
-
-  const targetProj = d3.geoNaturalEarth1();
-  targetProj.fitSize([width * 0.85, height * 0.85], usFeature);
-
-  countries.transition().duration(2000).ease(d3.easeCubicInOut)
-    .tween("zoomToUS", () => {
-      const iS = d3.interpolate(projection.scale(),     targetProj.scale());
-      const iT = d3.interpolate(projection.translate(), targetProj.translate());
-      return t => { projection.scale(iS(t)).translate(iT(t)); countries.attr("d", path); };
-    });
-
-  countries.transition().delay(1600).duration(700)
-    .attr("opacity", f => isUS(f) ? 1 : 0.06)
-    .attr("stroke",  f => isUS(f) ? "white" : "#222")
-    .attr("stroke-width", f => isUS(f) ? 1.5 : 0.3);
-}
-
 // Slide 10
 
 async function slideTenUSStates() {
@@ -1054,7 +1181,7 @@ function annotateGeoWithYear(year) {
   });
 }
 
-/** Build a zoomed-to-US world map (used by slides 4 & 5). */
+/** Build a zoomed-to-US world map with pan animation (used by slide 4). */
 function buildZoomedUSMap(containerSelector, highlight) {
   const container = document.querySelector(containerSelector);
   if (!container) return;
