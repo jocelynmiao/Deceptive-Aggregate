@@ -90,15 +90,33 @@ const slides = [
       </div>`
     },
   {
-    label: "Other map here",
+    label: "Zooming Into the U.S.",
     content: `
-      <div class="text-slide">
-        <p class="eyebrow">Slide 04 — Another map</p>
-        <h1>Another map is going here</h1>
-        <p class="lead">title</p>
-        <p>will add the map thing here</p>
-      </div>`
-    },
+    <div class="slide-layout">
+      <div class="text-panel">
+        <h3>Slide 04 — Localizing Climate Change</h3>
+        <h2>Zooming Into<br>the United States</h2>
+        <p>
+          Global temperature trends provide a useful
+          overview, but they can hide regional
+          differences.
+
+          Lets compare a specific country with the global average. 
+        </p>
+        <div id="comparison-cards">
+          <div class="stat-card">
+            <div class="stat-value" id="global-temp-readout">--</div>
+            <div class="stat-label">Global Average</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="us-temp-readout">--</div>
+            <div class="stat-label">United States Average</div>
+          </div>
+        </div>
+      </div>
+      <div id="us-map"></div>
+    </div>`
+  },
   {
     label: "Conclusion",
     content: `
@@ -138,9 +156,10 @@ function render(direction = 1) {
       contentEl.classList.add("visible");
 
       // Mount charts/maps after DOM is ready
-      if (slide.label === "Introduction")          slideOneMap();
+      if (slide.label === "Introduction") slideOneMap();
       if (slide.label === "Global Temperature Trend") slideTwoChart();
       if (slide.label === "Country-Level Breakdown")  slideThreeMap();
+      if (slide.label === "Zooming Into the U.S.") slideFourUS();
     });
   });
 }
@@ -509,4 +528,146 @@ function renderMapThree() {
         `<strong>${d.properties.name}</strong>${t != null ? t.toFixed(1) + " °C" : "No data"}`);
     })
     .on("mouseleave", hideTip);
+}
+
+
+async function slideFourUS() {
+  
+
+  d3.select("#us-map").html("");
+  if (!geoDataGlobal || !climateDataGlobal) {
+    [geoDataGlobal, climateDataGlobal] = await Promise.all([
+      d3.json("data/world.geojson"),
+      d3.csv("data/yearly_country_temp_historical.csv")
+    ]);
+  }
+  
+  const year = 1850;
+  const usRow = climateDataGlobal.find(
+    d =>
+      +d.year === year &&
+      (
+        d.country === "USA" ||
+        d.country === "United States of America"
+      )
+  );
+
+  const usTemp = usRow ? +usRow.mean_temp : null;
+  const yearRows = climateDataGlobal.filter(d => +d.year === year);
+  const globalTemp = d3.mean(yearRows, d => +d.mean_temp);
+
+  document.getElementById("global-temp-readout").textContent =globalTemp != null ? `${globalTemp.toFixed(1)}°C` : "--";
+  document.getElementById("us-temp-readout").textContent = usTemp != null ? `${usTemp.toFixed(1)}°C` : "--";
+  const yearData = climateDataGlobal.filter(d => +d.year === year);
+  const tempMap = new Map(yearData.map(d => [d.country, +d.mean_temp]));
+
+  geoDataGlobal.features.forEach(d => {
+    const name = nameFixes[d.properties.name] ?? d.properties.name;
+    d.properties.temperature = tempMap.get(name) ?? null;
+  });
+
+  createMapFour(globalTemp, usTemp);
+
+}
+
+function createMapFour(globalTemp, usTemp) {
+
+  const container = document.getElementById("us-map");
+
+  const width  = container.clientWidth  || 700;
+  const height = container.clientHeight || 500;
+  const color = d3.scaleSequential()
+  .domain([0, 30])
+  .interpolator(d3.interpolateReds);
+
+  const svg = d3.select("#us-map")
+    .append("svg")
+    .attr("viewBox", `0 0 ${width} ${height}`)
+    .attr("width", "100%")
+    .attr("height", "100%");
+
+  const worldProjection = d3.geoNaturalEarth1()
+    .scale(width / 5.2)
+    .translate([width / 2, height / 2]);
+
+  const projection = d3.geoNaturalEarth1().scale(width / 5.2).translate([width / 2, height / 2]);
+
+  const path = d3.geoPath(projection);
+
+  const countries = svg.selectAll("path")
+    .data(geoDataGlobal.features)
+    .join("path")
+    .attr("d", path)
+    .attr("fill", d =>
+      d.properties.temperature == null
+        ? "rgba(255,255,255,0.06)"
+        : color(d.properties.temperature)
+    )
+    .attr("stroke", "rgba(255,255,255,0.15)")
+    .attr("stroke-width", 0.4)
+    .attr("stroke", "#222")
+    .attr("opacity", 0.6);
+
+  const usFeature = geoDataGlobal.features.find(
+    d => d.properties.name === "USA"
+  );
+
+  if (!usFeature) {
+    console.error("USA feature not found");
+    return;
+  }
+
+  // Build target projection
+  const targetProjection = d3.geoNaturalEarth1();
+  targetProjection.fitSize(
+    [width * 0.85, height * 0.85],
+    usFeature
+  );
+
+  countries.transition()
+    .duration(2500)
+    .ease(d3.easeCubicInOut)
+    .tween("zoomToUS", () => {
+
+      const interpScale = d3.interpolate(
+        projection.scale(),
+        targetProjection.scale()
+      );
+
+      const interpTranslate = d3.interpolate(
+        projection.translate(),
+        targetProjection.translate()
+      );
+
+      return t => {
+
+        projection
+          .scale(interpScale(t))
+          .translate(interpTranslate(t));
+
+        countries.attr("d", path);
+      };
+    });
+
+  countries.transition()
+    .delay(1800)
+    .duration(700)
+    .attr("opacity", d =>
+      d.properties.name === "USA" ? 1 : 0.08
+    )
+    .attr("fill", d =>
+      d.properties.name === "USA"
+        ? "var(--accent)"
+        : "#444"
+    )
+    .attr("stroke", d =>
+      d.properties.name === "USA"
+        ? "white"
+        : "#222"
+    )
+    .attr("stroke-width", d =>
+      d.properties.name === "USA"
+        ? 1.5
+        : 0.5
+    );
 }
