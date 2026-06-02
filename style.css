@@ -453,6 +453,136 @@ html, body {
   height: 100%;
 }
 
+/* ─── SLIDE 6 — Question slide ─────────────────────────────────────────────── */
+ 
+.question-slide h1 {
+  font-size: clamp(2rem, 4vw, 3.2rem);
+  margin-bottom: 0.5em;
+}
+.question-slide h1 em {
+  font-style: italic;
+  color: var(--accent);
+}
+.question-pills {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 28px 0 8px;
+}
+.q-pill {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  padding: 12px 18px;
+  font-family: var(--font-ui);
+  font-size: 0.95rem;
+  color: var(--text);
+  background: var(--surface);
+  animation: pillIn 0.5s var(--ease) both;
+}
+.q-pill:nth-child(1) { animation-delay: 0.1s; }
+.q-pill:nth-child(2) { animation-delay: 0.25s; }
+.q-pill:nth-child(3) { animation-delay: 0.4s; }
+ 
+@keyframes pillIn {
+  from { opacity: 0; transform: translateX(-16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+ 
+/* ─── SLIDE 7 — Season toggle ───────────────────────────────────────────────── */
+ 
+.season-toggle {
+  display: flex;
+  gap: 10px;
+}
+.season-btn {
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  padding: 8px 18px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.season-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(142, 24, 211, 0.12);
+}
+.season-btn:hover:not(.active) {
+  background: rgba(255,255,255,0.04);
+  color: var(--text);
+}
+ 
+/* Diverging colorbar for slide 7 */
+.colorbar-div {
+  background: linear-gradient(to right, #2166ac, #abd9e9, #f7f7f7, #fdae61, #d73027) !important;
+}
+ 
+/* ─── SLIDE 10 — Tradeoff list ──────────────────────────────────────────────── */
+ 
+.slide-layout-wide {
+  grid-template-columns: 320px 1fr;
+}
+ 
+.tradeoff-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+}
+.tradeoff-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid transparent;
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  color: var(--muted);
+  background: transparent;
+  transition: border-color 0.25s, color 0.25s, background 0.25s;
+  animation: tradeoffIn 0.4s var(--ease) both;
+}
+.tradeoff-row:nth-child(1) { animation-delay: 0.05s; }
+.tradeoff-row:nth-child(2) { animation-delay: 0.15s; }
+.tradeoff-row:nth-child(3) { animation-delay: 0.25s; }
+.tradeoff-row:nth-child(4) { animation-delay: 0.35s; }
+ 
+.tradeoff-row.active-row {
+  border-left-color: var(--accent);
+  color: var(--text);
+  background: rgba(142, 24, 211, 0.07);
+}
+.tradeoff-row strong {
+  color: var(--text);
+}
+.tradeoff-icon {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+ 
+@keyframes tradeoffIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+ 
+/* ─── us-map containers for new slides ─────────────────────────────────────── */
+ 
+#us-map-5, #us-map-8, #us-map-9, #us-map-10 {
+  width: 100%;
+  height: 100%;
+  min-height: 420px;
+}
+#us-map-5 svg, #us-map-8 svg, #us-map-9 svg, #us-map-10 svg {
+  width: 100%;
+  height: 100%;
+}
+
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
