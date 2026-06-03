@@ -62,14 +62,14 @@ const slides = [
         <p class="chart-subhead">... and our projections of the future often display this single metric. After all, doesn't this projection look intimidating?</p>
       </div>
       <div id="chart-controls">
-        <button class="chart-btn" id="btn-project">+ Show Projected (SSP5-8.5)</button>
+        <button class="chart-btn" id="btn-project">+ Show Projected (SSP2-4.5)</button>
         <button class="chart-btn secondary" id="btn-reset" disabled>Reset to Historical</button>
       </div>
       <div id="chart"></div>
       <div id="legend">
         <span><span class="legend-swatch" style="background:#4a90c4"></span>Historical (CMIP6)</span>
         <span id="legend-proj" style="display:none">
-          <span class="legend-swatch" style="background:#c0392b"></span>Projected SSP5-8.5
+          <span class="legend-swatch" style="background:#c0392b"></span>Projected SSP2-4.5
         </span>
       </div>`
   },
@@ -133,7 +133,7 @@ const slides = [
         <h3>Slide 05 — Present Day</h3>
         <h2>The U.S. in <span style="color:var(--red)">2014</span></h2>
         <p>
-          By isolating the country, it is clear the U.S. has warmed significantly. How does it compare globaly?
+          By isolating the country, it is clear the U.S. has warmed significantly. How does it compare globally?
         </p>
         <div id="comparison-cards">
           <div class="stat-card">
