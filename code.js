@@ -557,14 +557,14 @@ async function slideTwoChart() {
   projectedData.forEach(d  => d.type = "projected");
 
   const margin = { top: 16, right: 24, bottom: 38, left: 56 };
-  const totalW = 900, totalH = 340;
+  const totalW = 900, totalH = 280;
   const W = totalW - margin.left - margin.right;
   const H = totalH - margin.top  - margin.bottom;
 
   const svg = d3.select("#chart").append("svg")
     .attr("viewBox", `0 0 ${totalW} ${totalH}`)
-    .attr("width", "100%")
-    .style("overflow", "visible");
+    .attr("width", "100%");
+    // .style("overflow", "visible");
 
   const g = svg.append("g")
     .attr("transform", `translate(${margin.left},${margin.top})`);
@@ -710,7 +710,7 @@ function renderMapThree() {
     .attr("viewBox", `0 0 ${width} ${height}`)
     .attr("width", "100%").attr("height", "100%");
 
-  const projection = d3.geoNaturalEarth1().scale(width / 5.2).translate([width / 2, height / 2]);
+  const projection = d3.geoNaturalEarth1().scale(width / 5.6).translate([width / 2, height / 2]);
   const path  = d3.geoPath(projection);
   const color = d3.scaleSequential().domain([0, 30]).interpolator(d3.interpolateReds);
 
