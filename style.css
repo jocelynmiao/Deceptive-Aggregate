@@ -7,12 +7,12 @@
 }
 
 :root {
-  --bg: #000000;
-  --surface: #1d1d1d;
+  --bg: #212121;
+  --surface:#3d3d3d;
   --border: rgba(255, 255, 255, 0.08);
   --text: #e8e4dc;
   --muted: #7a7870;
-  --accent: #8e18d3;
+  --accent: #0084b4;
   --accent2: #4a90c4;
   --red: #c0392b;
   --font-head: "Franklin Gothic Medium", serif;
@@ -149,7 +149,7 @@ body {
 }
 
 #prev-btn {
-  right: 180px; /* place left of next button */
+  right: 180px; 
   left: auto;
 }
 
@@ -163,6 +163,11 @@ body {
 
 #next-btn:hover:not(:disabled) svg {
   transform: translateX(3px);
+}
+
+#restart-btn {
+  right: 28px;
+  bottom: 95px;
 }
 
 .nav-btn:hover:not(:disabled) {

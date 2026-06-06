@@ -394,7 +394,8 @@ function render(direction = 1) {
 
   document.getElementById("prev-btn").disabled = currentSlide === 0;
   document.getElementById("next-btn").disabled = currentSlide === slides.length - 1;
-
+  document.getElementById("restart-btn").style.display = currentSlide === slides.length - 1 ? "inline-flex" : "none";
+  
   const contentEl = document.getElementById("content");
   contentEl.classList.remove("visible");
   contentEl.style.transform = `translateX(${direction > 0 ? "40px" : "-40px"})`;
@@ -435,6 +436,7 @@ window.addEventListener("keydown", e => {
   if (e.key === "ArrowRight" || e.key === "ArrowDown") changeSlide(1);
   if (e.key === "ArrowLeft"  || e.key === "ArrowUp")   changeSlide(-1);
 });
+document.getElementById("restart-btn").addEventListener("click", () => {currentSlide = 0; render(1);});
 
 // Data loaders
 
