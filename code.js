@@ -583,7 +583,7 @@ function updateMapOne(year) {
 
 async function slideTwoChart() {
   d3.select("#chart").html("");
- 
+
   if (!historicalData) {
     const rows = await d3.csv("data/yearly_global_temp_historical.csv");
     historicalData = aggregateByYear(rows);
@@ -592,45 +592,48 @@ async function slideTwoChart() {
     const rows = await d3.csv("data/yearly_global_temp_ssp245.csv");
     projectedData = aggregateByYear(rows);
   }
- 
-  // Use 1850 as the baseline; everything is plotted as "warming since 1850".
+
   const baseline1850 = historicalData.find(d => d.year === 1850)?.temp;
   const baseline = baseline1850 ?? historicalData[0].temp;
- 
+
   historicalData.forEach(d => { d.type = "historical"; d.anomaly = d.temp - baseline; });
   projectedData.forEach(d  => { d.type = "projected";  d.anomaly = d.temp - baseline; });
- 
+
   const subhead = document.querySelector(".chart-subhead");
   if (subhead) subhead.textContent = "Plotted as warming since 1850 — the global aggregate, reframed.";
   const btnProject = document.getElementById("btn-project");
   if (btnProject) btnProject.textContent = "+ Show Projected (SSP2-4.5)";
- 
+
   const margin = { top: 16, right: 24, bottom: 38, left: 64 };
   const totalW = 900, totalH = 340;
   const W = totalW - margin.left - margin.right;
   const H = totalH - margin.top  - margin.bottom;
- 
+
   const svg = d3.select("#chart").append("svg")
     .attr("viewBox", `0 0 ${totalW} ${totalH}`)
     .attr("width", "100%")
     .style("overflow", "visible");
- 
+  svg.append("defs").append("clipPath")
+    .attr("id", "plot-clip")
+    .append("rect")
+    .attr("x", 0).attr("y", 0)
+    .attr("width", W).attr("height", H);
   const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
- 
+
   let allData = [...historicalData];
- 
-  const x = d3.scaleBand().domain(allData.map(d => d.year)).range([0, W]).padding(0.2);
+
+  const x = d3.scaleLinear()
+    .domain(d3.extent(allData, d => d.year))
+    .range([0, W]);
+
   const y = d3.scaleLinear()
     .domain([0, d3.max(allData, d => d.anomaly) + 0.15])
     .range([H, 0]);
-  const colorScale = d3.scaleSequential()
-    .domain([0, d3.max(allData, d => d.anomaly)])
-    .interpolator(d3.interpolateReds);
- 
+
   const gridG  = g.append("g").attr("class", "grid");
   const xAxisG = g.append("g").attr("class", "axis").attr("transform", `translate(0,${H})`);
   const yAxisG = g.append("g").attr("class", "axis");
- 
+
   function updateGrid(yScale) {
     gridG.call(d3.axisLeft(yScale).tickSize(-W).tickFormat(""))
       .selectAll("line").attr("stroke", "rgba(255,255,255,0.06)");
@@ -643,75 +646,212 @@ async function slideTwoChart() {
     yAxisG.selectAll("text").attr("fill", "#7a7870");
   }
   function renderAxes() {
-    const tickYears = x.domain().filter(yr => yr % 20 === 0);
-    xAxisG.call(d3.axisBottom(x).tickValues(tickYears).tickFormat(d3.format("d")));
+    xAxisG.call(d3.axisBottom(x).ticks(8).tickFormat(d3.format("d")));
     yAxisG.call(d3.axisLeft(y).ticks(6).tickFormat(d => `+${d.toFixed(1)}°C`));
     styleAxes();
   }
- 
+
   updateGrid(y);
   renderAxes();
- 
+
   g.append("text")
     .attr("transform", "rotate(-90)").attr("y", -52).attr("x", -H / 2)
     .attr("text-anchor", "middle").attr("fill", "#7a7870").style("font-size", "10px")
     .text("Warming since 1850 (°C)");
- 
-  function drawBars(data, animate) {
-    const bars = g.selectAll(".bar").data(data, d => d.year);
-    bars.enter().append("rect")
-      .attr("class", d => `bar bar-${d.type}`)
-      .attr("fill",   d => colorScale(d.anomaly))
-      .attr("x",      d => x(d.year))
-      .attr("width",  x.bandwidth())
-      .attr("y", H).attr("height", 0)
-      .on("mousemove", (event, d) => showTip(event,
-        `<strong>${d.year}</strong>+${d.anomaly.toFixed(2)} °C since 1850`))
-      .on("mouseleave", hideTip)
+
+  const lineGen = d3.line()
+    .x(d => x(d.year))
+    .y(d => y(d.anomaly))
+    .curve(d3.curveCatmullRom.alpha(0.5));
+
+  const areaGen = d3.area()
+    .x(d => x(d.year))
+    .y0(H)
+    .y1(d => y(d.anomaly))
+    .curve(d3.curveCatmullRom.alpha(0.5));
+
+  const plotG = g.append("g").attr("clip-path", "url(#plot-clip)");
+
+  function animateLine(pathEl, durationMs) {
+    const len = pathEl.node().getTotalLength();
+    pathEl
+      .attr("stroke-dasharray", `${len} ${len}`)
+      .attr("stroke-dashoffset", len)
       .transition()
-        .duration(animate ? 600 : 350)
-        .delay((_, i) => animate ? i * 4 : 0)
-        .attr("y",      d => y(d.anomaly))
-        .attr("height", d => H - y(d.anomaly));
-    bars.transition().duration(500)
-      .attr("x",      d => x(d.year)).attr("width",  x.bandwidth())
-      .attr("fill",   d => colorScale(d.anomaly))
-      .attr("y",      d => y(d.anomaly))
-      .attr("height", d => H - y(d.anomaly));
+        .duration(durationMs)
+        .ease(d3.easeLinear)
+        .attr("stroke-dashoffset", 0);
   }
- 
-  drawBars(historicalData, false);
- 
+
+  const bisect = d3.bisector(d => d.year).left;
+
+  const hoverLine = g.append("line")
+    .attr("class", "hover-rule")
+    .attr("y1", 0).attr("y2", H)
+    .attr("stroke", "rgba(255,255,255,0.18)")
+    .attr("stroke-width", 1)
+    .attr("pointer-events", "none")
+    .style("display", "none");
+
+  const hoverDot = g.append("circle")
+    .attr("r", 4)
+    .attr("fill", "#fff")
+    .attr("pointer-events", "none")
+    .style("display", "none");
+
+  function attachTooltip(dataset) {
+    let overlay = g.select(".tooltip-overlay");
+    if (overlay.empty()) {
+      overlay = g.append("rect").attr("class", "tooltip-overlay");
+    }
+    overlay
+      .attr("width", W).attr("height", H)
+      .attr("fill", "none")
+      .attr("pointer-events", "all")
+      .on("mousemove", function (event) {
+        const [mx] = d3.pointer(event);
+        const yr   = x.invert(mx);
+        const i    = bisect(dataset, yr, 1);
+        const d0   = dataset[i - 1], d1 = dataset[i];
+        const d    = !d1 ? d0 : !d0 ? d1 : (yr - d0.year < d1.year - yr ? d0 : d1);
+        if (!d) return;
+
+        const cx = x(d.year), cy = y(d.anomaly);
+        hoverLine.style("display", null).attr("x1", cx).attr("x2", cx);
+        hoverDot.style("display", null).attr("cx", cx).attr("cy", cy);
+        showTip(event, `<strong>${d.year}</strong>&nbsp;+${d.anomaly.toFixed(2)} °C since 1850`);
+      })
+      .on("mouseleave", () => {
+        hoverLine.style("display", "none");
+        hoverDot.style("display", "none");
+        hideTip();
+      });
+  }
+
+  plotG.append("path")
+    .datum(historicalData)
+    .attr("class", "area-hist")
+    .attr("fill", "#4a90c4")
+    .attr("fill-opacity", 0.15)
+    .attr("d", areaGen);
+
+  const histLine = plotG.append("path")
+    .datum(historicalData)
+    .attr("class", "line-hist")
+    .attr("fill", "none")
+    .attr("stroke", "#4a90c4")
+    .attr("stroke-width", 2.2)
+    .attr("d", lineGen);
+
+  animateLine(histLine, 1400);
+  attachTooltip(historicalData);
+
   document.getElementById("btn-project").addEventListener("click", function () {
     this.disabled = true;
     document.getElementById("btn-reset").disabled = false;
     document.getElementById("legend-proj").style.display = "inline";
+
     allData = [...historicalData, ...projectedData];
-    x.domain(allData.map(d => d.year));
+    x.domain(d3.extent(allData, d => d.year));
     y.domain([0, d3.max(allData, d => d.anomaly) + 0.15]);
-    colorScale.domain([0, d3.max(allData, d => d.anomaly)]);
-    const tickYears = x.domain().filter(yr => yr % 20 === 0);
-    xAxisG.transition().duration(500).call(d3.axisBottom(x).tickValues(tickYears).tickFormat(d3.format("d")));
+
+    // Transition axes
+    xAxisG.transition().duration(500).call(d3.axisBottom(x).ticks(10).tickFormat(d3.format("d")));
     yAxisG.transition().duration(500).call(d3.axisLeft(y).ticks(6).tickFormat(d => `+${d.toFixed(1)}°C`));
-    styleAxes(); updateGrid(y);
-    drawBars(allData, true);
+    styleAxes();
+    updateGrid(y);
+
+    // Morph historical paths to new scale
+    plotG.select(".area-hist").transition().duration(500).attr("d", areaGen(historicalData));
+    plotG.select(".line-hist").transition().duration(500).attr("d", lineGen(historicalData));
+
+    // Draw projected area (fade in)
+    plotG.append("path")
+      .datum(projectedData)
+      .attr("class", "area-proj")
+      .attr("fill", "#c0392b")
+      .attr("fill-opacity", 0)
+      .attr("d", areaGen)
+      .transition().delay(400).duration(700)
+      .attr("fill-opacity", 0.18);
+
+    // Draw projected line (animate on after a short delay)
+    const projLine = plotG.append("path")
+      .datum(projectedData)
+      .attr("class", "line-proj")
+      .attr("fill", "none")
+      .attr("stroke", "#c0392b")
+      .attr("stroke-width", 2.2)
+      .attr("stroke-opacity", 0)
+      .attr("d", lineGen);
+
+    setTimeout(() => {
+      const len = projLine.node().getTotalLength();
+      projLine
+        .attr("stroke-opacity", 1)
+        .attr("stroke-dasharray", `${len} ${len}`)
+        .attr("stroke-dashoffset", len)
+        .transition()
+          .duration(1200)
+          .ease(d3.easeLinear)
+          .attr("stroke-dashoffset", 0);
+    }, 420);
+
+    const markerX = x(2015);
+
+    //2015 line
+    const markerLine = g.append("line")
+      .attr("class", "proj-marker")
+      .attr("x1", markerX).attr("x2", markerX)
+      .attr("y1", 0).attr("y2", H)
+      .attr("stroke", "rgba(255,255,255,0.3)")
+      .attr("stroke-width", 1)
+      .attr("stroke-dasharray", "4 3")
+      .attr("opacity", 0);
+
+    const markerLabel = g.append("text")
+      .attr("class", "proj-marker")
+      .attr("x", markerX + 8)
+      .attr("y", 16)
+      .attr("fill", "rgba(255,255,255,0.45)")
+      .attr("font-size", "7px")
+      .attr("font-family", "var(--font-ui, sans-serif)")
+      .text("projected temperatures")
+      .attr("opacity", 0);
+
+    setTimeout(() => {
+      markerLine.transition().duration(400).attr("opacity", 1);
+      markerLabel.transition().duration(400).attr("opacity", 1);
+    }, 420);
+
+    attachTooltip(allData);
   });
- 
+
   document.getElementById("btn-reset").addEventListener("click", function () {
     this.disabled = true;
     document.getElementById("btn-project").disabled = false;
     document.getElementById("legend-proj").style.display = "none";
-    g.selectAll(".bar-projected").transition().duration(300).attr("y", H).attr("height", 0).remove();
-    allData = [...historicalData];
-    x.domain(allData.map(d => d.year));
-    y.domain([0, d3.max(allData, d => d.anomaly) + 0.15]);
-    colorScale.domain([0, d3.max(allData, d => d.anomaly)]);
+
+    // Fade out + remove projected layers
+    plotG.select(".area-proj").transition().duration(300).attr("fill-opacity", 0).remove();
+    plotG.select(".line-proj").transition().duration(300).attr("stroke-opacity", 0).remove();
+    g.selectAll(".proj-marker").transition().duration(300).attr("opacity", 0).remove();
+
     setTimeout(() => {
-      const tickYears = x.domain().filter(yr => yr % 20 === 0);
-      xAxisG.transition().duration(500).call(d3.axisBottom(x).tickValues(tickYears).tickFormat(d3.format("d")));
+      allData = [...historicalData];
+      x.domain(d3.extent(allData, d => d.year));
+      y.domain([0, d3.max(allData, d => d.anomaly) + 0.15]);
+
+      xAxisG.transition().duration(500).call(d3.axisBottom(x).ticks(8).tickFormat(d3.format("d")));
       yAxisG.transition().duration(400).call(d3.axisLeft(y).ticks(6).tickFormat(d => `+${d.toFixed(1)}°C`));
-      styleAxes(); updateGrid(y);
-      drawBars(historicalData, false);
+      styleAxes();
+      updateGrid(y);
+
+      // Morph historical paths back
+      plotG.select(".area-hist").transition().duration(500).attr("d", areaGen(historicalData));
+      plotG.select(".line-hist").transition().duration(500).attr("d", lineGen(historicalData));
+
+      attachTooltip(historicalData);
     }, 320);
   });
 }
