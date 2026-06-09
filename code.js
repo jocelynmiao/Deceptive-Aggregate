@@ -384,8 +384,13 @@ const slides = [
           <em>So — who is our audience, and how do we most efficiently convey our message?</em>
         </p>
       </div>
-      <div id="us-map-10" style="flex:1;min-height:420px;"></div>
-    </div>`
+      <div id="us-map-10" style="flex:1;min-height:420px;display:flex;flex-direction:column;gap:12px;">
+        <div id="us-map-10-map" style="flex:1;min-height:280px;position:relative;"></div>
+        <div id="us-map-10-chart" style="height:200px;display:none;background:rgba(255,255,255,0.02);border:1px solid var(--border);padding:8px 12px;position:relative;">
+          <button id="us-map-10-chart-close" title="Close" style="position:absolute;top:6px;right:8px;background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:1.1rem;line-height:1;padding:2px 6px;">×</button>
+        </div>
+    </div>
+  </div>`
 }
 ];
 
@@ -1212,6 +1217,7 @@ let slide7Year   = 1851;
 let slide10Year   = 1851;
 let slide10Season = "winter";
 let slide10Level  = "us"; // This is temporarly for later additions, specifically for more detailed level
+let slide10Selected = null;  // { name, level } when a state/country is clicked
 
 async function slideSevenWorld() {
   const slider7 = document.getElementById("year-slider-7");
@@ -1350,33 +1356,35 @@ const slide10StateCache = { historical: null, ssp245: null };
    }
 
 async function slideTenUSStates() {
-  const slider10 = document.getElementById("year-slider-10");
-  const label10  = document.getElementById("year-label-10");
-  if (slider10 && label10) { slider10.value = slide10Year; label10.textContent = slide10Year; }
-
-  d3.select("#us-map-10").html("");
+  d3.select("#us-map-10-map").html("");
+  hideDetailChart();
   await ensureBaseData();
- 
-  // Load BOTH country and state seasonal data in parallel
+
   const [histCountry, projCountry, histState, projState] = await Promise.all([
     ensureSeasonalData("country", "historical"),
     ensureSeasonalData("country", "ssp245"),
     loadStateRows("historical"),
     loadStateRows("ssp245"),
   ]);
- 
+
   const histYears = [...new Set(histCountry.map(r => +r.year))].sort((a, b) => a - b);
   const projYears = [...new Set(projCountry.map(r => +r.year))].sort((a, b) => a - b);
   const minYear   = histYears[0];
   const maxYear   = projYears[projYears.length - 1] || histYears[histYears.length - 1];
   const histMax   = histYears[histYears.length - 1];
- 
-  const slider = slider10;
-  const label  = label10;
+
+  // Expose a re-render hook so click handlers in renderers can re-render
+  // the map to update the selection outline.
+  window.__slide10ReRender = () =>
+    renderSlide10Map(histCountry, projCountry, histState, projState, histMax);
+
+  // slider
+  const slider = document.getElementById("year-slider-10");
+  const label  = document.getElementById("year-label-10");
   const src    = document.getElementById("year-source-10");
   if (slider) {
     slider.min   = minYear;
-    slider.max   = maxYear-1;
+    slider.max   = maxYear;
     slider.value = slide10Year;
     if (label) label.textContent = slide10Year;
     if (src)   src.textContent = slide10Year > histMax ? "Projected (SSP2-4.5)" : "Historical (CMIP6)";
@@ -1385,64 +1393,46 @@ async function slideTenUSStates() {
       if (label) label.textContent = slide10Year;
       if (src)   src.textContent = slide10Year > histMax ? "Projected (SSP2-4.5)" : "Historical (CMIP6)";
       renderSlide10Map(histCountry, projCountry, histState, projState, histMax);
+      updateChartYearMarker();    // cheap update — moves the vertical line only
     };
   }
 
+  // season buttons
+  const wBtn = document.getElementById("btn-10-winter");
+  const sBtn = document.getElementById("btn-10-summer");
+  const aBtn = document.getElementById("btn-10-annual");
+  const setSeason = (val, btnOn) => {
+    slide10Season = val;
+    [wBtn, sBtn, aBtn].forEach(b => b?.classList.remove("active"));
+    btnOn?.classList.add("active");
+    renderSlide10Map(histCountry, projCountry, histState, projState, histMax);
+    if (slide10Selected) renderSlide10DetailChart();
+  };
+  wBtn?.addEventListener("click", () => setSeason("winter", wBtn));
+  sBtn?.addEventListener("click", () => setSeason("summer", sBtn));
+  aBtn?.addEventListener("click", () => setSeason("annual", aBtn));
+
+  // level buttons
   const usLvlBtn  = document.getElementById("btn-10-us");
   const ctrLvlBtn = document.getElementById("btn-10-countries");
   const glbLvlBtn = document.getElementById("btn-10-global");
-  const lvlBtns   = [usLvlBtn, ctrLvlBtn, glbLvlBtn];
-  usLvlBtn?.addEventListener("click", () => {
-    slide10Level = "us";
-    lvlBtns.forEach(b => b?.classList.remove("active"));
-    usLvlBtn.classList.add("active");
-    updateTradeoffHighlight();
+  const setLevel = (val, btnOn) => {
+    slide10Level = val;
+    slide10Selected = null;       // changing level clears any current selection
+    hideDetailChart();
+    [usLvlBtn, ctrLvlBtn, glbLvlBtn].forEach(b => b?.classList.remove("active"));
+    btnOn?.classList.add("active");
     renderSlide10Map(histCountry, projCountry, histState, projState, histMax);
-  });
-  ctrLvlBtn?.addEventListener("click", () => {
-    slide10Level = "countries";
-    lvlBtns.forEach(b => b?.classList.remove("active"));
-    ctrLvlBtn.classList.add("active");
     updateTradeoffHighlight();
-    renderSlide10Map(histCountry, projCountry, histState, projState, histMax);
-  });
-  glbLvlBtn?.addEventListener("click", () => {
-    slide10Level = "global";
-    lvlBtns.forEach(b => b?.classList.remove("active"));
-    glbLvlBtn.classList.add("active");
-    updateTradeoffHighlight();
-    renderSlide10Map(histCountry, projCountry, histState, projState, histMax);
-  });
+  };
+  usLvlBtn?.addEventListener("click",  () => setLevel("us",        usLvlBtn));
+  ctrLvlBtn?.addEventListener("click", () => setLevel("countries", ctrLvlBtn));
+  glbLvlBtn?.addEventListener("click", () => setLevel("global",    glbLvlBtn));
 
-  const wBtn   = document.getElementById("btn-10-winter");
-  const sBtn   = document.getElementById("btn-10-summer");
-  const aBtn   = document.getElementById("btn-10-annual");
-  const snBtns = [wBtn, sBtn, aBtn];
-  wBtn?.addEventListener("click", () => {
-    slide10Season = "winter";
-    snBtns.forEach(b => b?.classList.remove("active"));
-    wBtn.classList.add("active");
-    d3.select("#us-map-10 svg").remove(); // force full rebuild on season change
-    renderSlide10Map(histCountry, projCountry, histState, projState, histMax);
-  });
-  sBtn?.addEventListener("click", () => {
-    slide10Season = "summer";
-    snBtns.forEach(b => b?.classList.remove("active"));
-    sBtn.classList.add("active");
-    d3.select("#us-map-10 svg").remove();
-    renderSlide10Map(histCountry, projCountry, histState, projState, histMax);
-  });
-  aBtn?.addEventListener("click", () => {
-    slide10Season = "annual";
-    snBtns.forEach(b => b?.classList.remove("active"));
-    aBtn.classList.add("active");
-    d3.select("#us-map-10 svg").remove();
-    renderSlide10Map(histCountry, projCountry, histState, projState, histMax);
-  });
- 
   renderSlide10Map(histCountry, projCountry, histState, projState, histMax);
   updateTradeoffHighlight();
 }
+
 
 // Highlights the tradeoff-row(s) matching the current level and season.
 // Level and annual are independent — both can be active simultaneously.
@@ -1546,37 +1536,18 @@ function renderSlide10Map(histCountry, projCountry, histState, projState, histMa
 // renderer — US zoomed, state outlines on top
 // On first call builds the full SVG; on subsequent calls just updates state fills in-place.
 function renderSlide10US(usTemp, stateTempMap) {
-  const container = document.querySelector("#us-map-10");
+  d3.select("#us-map-10-map svg").remove();
+
+  const container = document.querySelector("#us-map-10-map");
   if (!container) return;
 
-  const color = anomalyColor(-2, 0, 5);
-
-  // If states are already rendered, just update fills in-place — no rebuild, no fade
-  const existingSvg = d3.select("#us-map-10 svg");
-  if (!existingSvg.empty() && !existingSvg.selectAll(".state").empty()) {
-    existingSvg.selectAll(".state")
-      .attr("fill", f => {
-        const t = stateTempMap.get(f.properties.name);
-        return t != null ? color(t) : "rgba(255,255,255,0.04)";
-      })
-      .on("mousemove", (event, f) => {
-        const t = stateTempMap.get(f.properties.name);
-        const seasonLbl = slide10Season === "annual" ? "Annual" : slide10Season === "winter" ? "Winter" : "Summer";
-        showTip(event,
-          `<strong>${f.properties.name}</strong><br>` +
-          (t != null
-            ? `${slide10Year} ${seasonLbl}: ${t >= 0 ? "+" : ""}${t.toFixed(2)} °C vs 1850`
-            : `<span style="opacity:0.7;">No data for ${f.properties.name}</span>`)
-        );
-      });
-    return;
-  }
-
-  // First render — build the full SVG from scratch
-  d3.select("#us-map-10 svg").remove();
-
   const width  = container.clientWidth  || 700;
-  const height = container.clientHeight || 420;
+  const height = container.clientHeight || 280;
+
+  // Quantized state-level color scales (same buckets as slides 8/9)
+  const color = slide10Season === "winter"
+    ? d3.scaleQuantize().domain([-15, 20]).range(d3.quantize(d3.interpolateBlues, 6))
+    : d3.scaleQuantize().domain([5,  40]).range(d3.quantize(d3.interpolateOrRd, 6));
 
   const usFeature = geoDataGlobal.features.find(isUS);
   if (!usFeature) return;
@@ -1589,11 +1560,10 @@ function renderSlide10US(usTemp, stateTempMap) {
   ]);
   const path = d3.geoPath(projection);
 
-  const svg = d3.select("#us-map-10").append("svg")
+  const svg = d3.select("#us-map-10-map").append("svg")
     .attr("viewBox", `0 0 ${width} ${height}`)
     .attr("width", "100%").attr("height", "100%");
 
-  // Faded background world
   svg.selectAll(".country-bg")
     .data(geoDataGlobal.features)
     .join("path")
@@ -1603,16 +1573,19 @@ function renderSlide10US(usTemp, stateTempMap) {
     .attr("stroke", "#111").attr("stroke-width", 0.3)
     .attr("opacity", f => isUS(f) ? 0 : 0.04);
 
-  // US country outline as base layer underneath the states
   svg.append("path")
     .datum(usFeature)
     .attr("d", path)
     .attr("fill", "#2a2a2a")
     .attr("stroke", "rgba(255,255,255,0.25)").attr("stroke-width", 0.5);
 
-  // STATES — fade in once on first load only
   d3.json("data/us-states.geojson").then(statesGeo => {
     if (!statesGeo) return;
+
+    const isSelected = f =>
+      slide10Selected && slide10Selected.level === "us" &&
+      slide10Selected.name === f.properties.name;
+
     svg.selectAll(".state")
       .data(statesGeo.features)
       .join("path")
@@ -1622,58 +1595,37 @@ function renderSlide10US(usTemp, stateTempMap) {
         const t = stateTempMap.get(f.properties.name);
         return t != null ? color(t) : "rgba(255,255,255,0.04)";
       })
-      .attr("stroke", "rgba(255,255,255,0.45)").attr("stroke-width", 0.7)
+      .attr("stroke", f => isSelected(f) ? "#ffffff" : "rgba(255,255,255,0.45)")
+      .attr("stroke-width", f => isSelected(f) ? 2.2 : 0.7)
+      .attr("cursor", "pointer")
       .attr("opacity", 0)
       .on("mousemove", (event, f) => {
         const t = stateTempMap.get(f.properties.name);
-        const seasonLbl = slide10Season === "annual" ? "Annual" : slide10Season === "winter" ? "Winter" : "Summer";
+        const seasonLbl = slide10Season === "winter" ? "Winter" : "Summer";
         showTip(event,
-          `<strong>${f.properties.name}</strong><br>` +
+          `<strong>${f.properties.name}</strong>` +
           (t != null
-            ? `${slide10Year} ${seasonLbl}: ${t >= 0 ? "+" : ""}${t.toFixed(2)} °C vs 1850`
+            ? `${slide10Year} ${seasonLbl}: ${t.toFixed(1)} °C<br><span style="opacity:0.6;font-size:0.7rem;">Click to see trajectory</span>`
             : `<span style="opacity:0.7;">No data for ${f.properties.name}</span>`)
         );
       })
       .on("mouseleave", hideTip)
-      .transition().duration(300).attr("opacity", 1);
-  }).catch(() => { /* file missing — fail silently */ });
+      .on("click", (event, f) => {
+        const name = f.properties.name;
+        if (slide10Selected && slide10Selected.name === name && slide10Selected.level === "us") {
+          slide10Selected = null;
+          hideDetailChart();
+        } else if (stateTempMap.get(name) != null) {  // only allow clicks on entities with data
+          slide10Selected = { name, level: "us" };
+          renderSlide10DetailChart();
+        }
+        // re-render to update outline highlight
+        if (typeof __slide10ReRender === "function") __slide10ReRender();
+      })
+      .transition().duration(500).attr("opacity", 1);
+  }).catch(() => {});
 }
 
-// renderer — world country map (mirrors slide 3 but renders into #us-map-10)
-function renderSlide10Countries() {
-  d3.select("#us-map-10 svg").remove();
-
-  const container = document.querySelector("#us-map-10");
-  if (!container) return;
-
-  const width  = container.clientWidth  || 700;
-  const height = container.clientHeight || 420;
-
-  const svg = d3.select("#us-map-10").append("svg")
-    .attr("viewBox", `0 0 ${width} ${height}`)
-    .attr("width", "100%").attr("height", "100%");
-
-  const projection = d3.geoNaturalEarth1().scale(width / 5.6).translate([width / 2, height / 2]);
-  const path  = d3.geoPath(projection);
-  const color = anomalyColor(-1, 0, 3);
-
-  svg.selectAll("path")
-    .data(geoDataGlobal.features)
-    .join("path")
-    .attr("d", path)
-    .attr("fill", f => f.properties.temperature == null
-      ? "rgba(255,255,255,0.06)"
-      : color(f.properties.temperature))
-    .attr("stroke", "rgba(255,255,255,0.15)").attr("stroke-width", 0.4)
-    .on("mousemove", (event, f) => {
-      const t = f.properties.temperature;
-      showTip(event,
-        `<strong>${f.properties.name}</strong><br>` +
-        (t != null ? `${t >= 0 ? "+" : ""}${t.toFixed(2)} °C vs 1850` : "No data")
-      );
-    })
-    .on("mouseleave", hideTip);
-}
 
 // renderer — single merged landmass colored by global seasonal average (mirrors slide 1)
 function renderSlide10Global(avgTemp) {
@@ -1708,6 +1660,310 @@ function renderSlide10Global(avgTemp) {
     })
     .on("mouseleave", hideTip);
 }
+
+function renderSlide10Countries() {
+  d3.select("#us-map-10-map svg").remove();
+
+  const container = document.querySelector("#us-map-10-map");
+  if (!container) return;
+
+  const width  = container.clientWidth  || 700;
+  const height = container.clientHeight || 280;
+
+  const svg = d3.select("#us-map-10-map").append("svg")
+    .attr("viewBox", `0 0 ${width} ${height}`)
+    .attr("width", "100%").attr("height", "100%");
+
+  const projection = d3.geoNaturalEarth1().scale(width / 5.6).translate([width / 2, height / 2]);
+  const path  = d3.geoPath(projection);
+  const color = anomalyColor(-1, 0, 3);
+
+  const isSelected = f =>
+    slide10Selected && slide10Selected.level === "countries" &&
+    (f.properties.name === slide10Selected.name ||
+     (nameFixes[f.properties.name] ?? f.properties.name) === slide10Selected.name);
+
+  svg.selectAll("path")
+    .data(geoDataGlobal.features)
+    .join("path")
+    .attr("d", path)
+    .attr("fill", f => f.properties.temperature == null
+      ? "rgba(255,255,255,0.06)"
+      : color(f.properties.temperature))
+    .attr("stroke", f => isSelected(f) ? "#ffffff" : "rgba(255,255,255,0.15)")
+    .attr("stroke-width", f => isSelected(f) ? 1.6 : 0.4)
+    .attr("cursor", "pointer")
+    .on("mousemove", (event, f) => {
+      const t = f.properties.temperature;
+      showTip(event,
+        `<strong>${f.properties.name}</strong><br>` +
+        (t != null
+          ? `${t >= 0 ? "+" : ""}${t.toFixed(2)} °C vs 1850<br><span style="opacity:0.6;font-size:0.7rem;">Click to see trajectory</span>`
+          : "No data")
+      );
+    })
+    .on("mouseleave", hideTip)
+    .on("click", (event, f) => {
+      const canonical = nameFixes[f.properties.name] ?? f.properties.name;
+      if (slide10Selected && slide10Selected.name === canonical && slide10Selected.level === "countries") {
+        slide10Selected = null;
+        hideDetailChart();
+      } else if (f.properties.temperature != null) {
+        slide10Selected = { name: canonical, level: "countries" };
+        renderSlide10DetailChart();
+      }
+      if (typeof __slide10ReRender === "function") __slide10ReRender();
+    });
+}
+
+
+// NEW: pull a year-by-year temperature series for the selected entity
+function getEntitySeries(rows, level, season, name) {
+  // Returns: [{year, temp}, …] for the entity's seasonal time series.
+  // For "annual", averages winter + summer per year.
+  const colName = level === "us" ? "state" : "country";
+  const tempCol = level === "us" ? "mean_temp_c" : "mean_temp";
+
+  if (season === "annual") {
+    const winter = rows.filter(r => r[colName] === name && r.season === "winter");
+    const summer = rows.filter(r => r[colName] === name && r.season === "summer");
+    const wMap = new Map(winter.map(r => [+r.year, +r[tempCol]]));
+    const sMap = new Map(summer.map(r => [+r.year, +r[tempCol]]));
+    const years = [...new Set([...wMap.keys(), ...sMap.keys()])].sort((a, b) => a - b);
+    return years
+      .map(y => {
+        const w = wMap.get(y), s = sMap.get(y);
+        if (w == null || s == null) return null;
+        return { year: y, temp: (w + s) / 2 };
+      })
+      .filter(Boolean);
+  }
+  return rows
+    .filter(r => r[colName] === name && r.season === season)
+    .map(r => ({ year: +r.year, temp: +r[tempCol] }))
+    .sort((a, b) => a.year - b.year);
+}
+
+
+// NEW: render the per-entity detail chart with global comparison
+async function renderSlide10DetailChart() {
+  const container = document.getElementById("us-map-10-chart");
+  if (!container) return;
+  if (!slide10Selected) { hideDetailChart(); return; }
+
+  const { name, level } = slide10Selected;
+
+  // load entity data
+  let histRows, projRows;
+  if (level === "us") {
+    [histRows, projRows] = await Promise.all([loadStateRows("historical"), loadStateRows("ssp245")]);
+  } else {
+    [histRows, projRows] = await Promise.all([
+      ensureSeasonalData("country", "historical"),
+      ensureSeasonalData("country", "ssp245"),
+    ]);
+  }
+
+  const seasonKey = slide10Season;
+  const entityHist = getEntitySeries(histRows, level, seasonKey, name);
+  const entityProj = getEntitySeries(projRows, level, seasonKey, name);
+
+  if (!entityHist.length) {
+    container.style.display = "block";
+    d3.select("#us-map-10-chart svg").remove();
+    d3.select("#us-map-10-chart .chart-error").remove();
+    d3.select("#us-map-10-chart").append("div")
+      .attr("class", "chart-error")
+      .style("padding", "30px 12px")
+      .style("color", "var(--muted)")
+      .style("font-family", "var(--font-ui)")
+      .style("font-size", "0.85rem")
+      .text(`No ${seasonKey} data available for ${name}.`);
+    return;
+  }
+
+  // load global comparison data
+  const [gHist, gProj] = await Promise.all([
+    ensureSeasonalData("global", "historical"),
+    ensureSeasonalData("global", "ssp245"),
+  ]);
+
+  const globalSeries = (rows) => {
+    if (seasonKey === "annual") {
+      const w = rows.filter(r => r.season === "winter");
+      const s = rows.filter(r => r.season === "summer");
+      const wM = new Map(w.map(r => [+r.year, +r.mean_temp]));
+      const sM = new Map(s.map(r => [+r.year, +r.mean_temp]));
+      const yrs = [...new Set([...wM.keys(), ...sM.keys()])].sort((a, b) => a - b);
+      return yrs.map(y => {
+        const wv = wM.get(y), sv = sM.get(y);
+        if (wv == null || sv == null) return null;
+        return { year: y, temp: (wv + sv) / 2 };
+      }).filter(Boolean);
+    }
+    return rows.filter(r => r.season === seasonKey)
+      .map(r => ({ year: +r.year, temp: +r.mean_temp }))
+      .sort((a, b) => a.year - b.year);
+  };
+  const globalHist = globalSeries(gHist);
+  const globalProj = globalSeries(gProj);
+
+  // compute anomalies vs 1850 for each series independently
+  const baselineOf = arr => arr.find(d => d.year === 1850)?.temp ?? arr[0]?.temp ?? 0;
+  const entBase = baselineOf(entityHist);
+  const glbBase = baselineOf(globalHist);
+  const eH = entityHist.map(d => ({ year: d.year, anomaly: d.temp - entBase }));
+  const eP = entityProj.map(d => ({ year: d.year, anomaly: d.temp - entBase }));
+  const gH = globalHist.map(d => ({ year: d.year, anomaly: d.temp - glbBase }));
+  const gP = globalProj.map(d => ({ year: d.year, anomaly: d.temp - glbBase }));
+
+  // ---- DRAW ----
+  container.style.display = "block";
+  d3.select("#us-map-10-chart svg").remove();
+  d3.select("#us-map-10-chart .chart-error").remove();
+
+  const W_total = container.clientWidth  || 700;
+  const H_total = container.clientHeight || 200;
+  const margin = { top: 24, right: 14, bottom: 22, left: 40 };
+  const W = W_total - margin.left - margin.right;
+  const H = H_total - margin.top  - margin.bottom;
+
+  const svg = d3.select("#us-map-10-chart").append("svg")
+    .attr("width", W_total).attr("height", H_total).style("display", "block");
+
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  const allPts = [...eH, ...eP, ...gH, ...gP];
+  const x = d3.scaleLinear().domain(d3.extent(allPts, d => d.year)).range([0, W]);
+  const yMin = Math.min(0, d3.min(allPts, d => d.anomaly) - 0.3);
+  const yMax = d3.max(allPts, d => d.anomaly) + 0.3;
+  const y = d3.scaleLinear().domain([yMin, yMax]).range([H, 0]);
+
+  // zero baseline
+  g.append("line")
+    .attr("x1", 0).attr("x2", W)
+    .attr("y1", y(0)).attr("y2", y(0))
+    .attr("stroke", "rgba(255,255,255,0.18)")
+    .attr("stroke-dasharray", "2 3");
+
+  // 2014/2015 transition line
+  const transitionX = x(2015);
+  g.append("line")
+    .attr("x1", transitionX).attr("x2", transitionX)
+    .attr("y1", 0).attr("y2", H)
+    .attr("stroke", "rgba(255,255,255,0.12)")
+    .attr("stroke-dasharray", "3 3");
+
+  const line = d3.line()
+    .x(d => x(d.year))
+    .y(d => y(d.anomaly))
+    .curve(d3.curveCatmullRom.alpha(0.5));
+
+  // global lines — dashed gray (background)
+  g.append("path").datum(gH)
+    .attr("fill", "none").attr("stroke", "#8a8780")
+    .attr("stroke-width", 1.3).attr("stroke-dasharray", "4 3").attr("d", line);
+  g.append("path").datum(gP)
+    .attr("fill", "none").attr("stroke", "#8a8780")
+    .attr("stroke-width", 1.3).attr("stroke-dasharray", "4 3").attr("opacity", 0.7).attr("d", line);
+
+  // entity lines — solid (foreground)
+  g.append("path").datum(eH)
+    .attr("fill", "none").attr("stroke", "#4a90c4")
+    .attr("stroke-width", 2.4).attr("d", line);
+  g.append("path").datum(eP)
+    .attr("fill", "none").attr("stroke", "#c0392b")
+    .attr("stroke-width", 2.4).attr("d", line);
+
+  // axes
+  g.append("g")
+    .attr("transform", `translate(0,${H})`)
+    .call(d3.axisBottom(x).ticks(7).tickFormat(d3.format("d")))
+    .call(s => s.selectAll("line, path").attr("stroke", "rgba(255,255,255,0.18)"))
+    .call(s => s.selectAll("text").attr("fill", "var(--muted)").style("font-size", "10px"));
+  g.append("g")
+    .call(d3.axisLeft(y).ticks(4).tickFormat(d => `${d >= 0 ? "+" : ""}${d.toFixed(1)}°C`))
+    .call(s => s.selectAll("line, path").attr("stroke", "rgba(255,255,255,0.18)"))
+    .call(s => s.selectAll("text").attr("fill", "var(--muted)").style("font-size", "10px"));
+
+  // year marker (updates separately on slider drag — has its own class so it's findable)
+  g.append("line")
+    .attr("class", "year-marker")
+    .attr("x1", x(slide10Year)).attr("x2", x(slide10Year))
+    .attr("y1", 0).attr("y2", H)
+    .attr("stroke", "var(--accent)")
+    .attr("stroke-width", 1.5).attr("opacity", 0.75);
+
+  // title + stat
+  const seasonLbl = seasonKey === "annual" ? "annual" : seasonKey;
+  const finalEnt = (eP[eP.length - 1] ?? eH[eH.length - 1]).anomaly;
+  const finalGlb = (gP[gP.length - 1] ?? gH[gH.length - 1]).anomaly;
+  const diff = finalEnt - finalGlb;
+  const sign = diff >= 0 ? "+" : "";
+
+  g.append("text")
+    .attr("x", 0).attr("y", -10)
+    .attr("fill", "var(--text)")
+    .style("font-size", "11px")
+    .style("font-family", "var(--font-ui)")
+    .style("font-weight", "500")
+    .text(`${name} — ${seasonLbl} warming since 1850 (vs global)`);
+
+  g.append("text")
+    .attr("x", 0).attr("y", 4)
+    .attr("fill", "var(--muted)")
+    .style("font-size", "9.5px")
+    .style("font-family", "var(--font-ui)")
+    .text(
+      `By 2100: ${name} ${finalEnt >= 0 ? "+" : ""}${finalEnt.toFixed(1)}°C   |   ` +
+      `Global ${finalGlb >= 0 ? "+" : ""}${finalGlb.toFixed(1)}°C   |   ` +
+      `Difference ${sign}${diff.toFixed(1)}°C`
+    );
+
+  // legend (top right)
+  const legend = g.append("g").attr("transform", `translate(${W - 140}, -16)`);
+  legend.append("line").attr("x1", 0).attr("x2", 14).attr("y1", 4).attr("y2", 4)
+    .attr("stroke", "#4a90c4").attr("stroke-width", 2);
+  legend.append("text").attr("x", 18).attr("y", 7)
+    .attr("fill", "var(--muted)").style("font-size", "9px").text(name.length > 16 ? name.slice(0, 14) + "…" : name);
+  legend.append("line").attr("x1", 70).attr("x2", 84).attr("y1", 4).attr("y2", 4)
+    .attr("stroke", "#8a8780").attr("stroke-width", 1.3).attr("stroke-dasharray", "3 2");
+  legend.append("text").attr("x", 88).attr("y", 7)
+    .attr("fill", "var(--muted)").style("font-size", "9px").text("Global");
+
+  // wire up close button
+  const closeBtn = document.getElementById("us-map-10-chart-close");
+  if (closeBtn) {
+    closeBtn.onclick = () => {
+      slide10Selected = null;
+      hideDetailChart();
+      if (typeof __slide10ReRender === "function") __slide10ReRender();
+    };
+  }
+}
+
+// NEW: efficient slider-drag year-marker update (no full re-render)
+function updateChartYearMarker() {
+  if (!slide10Selected) return;
+  const marker = d3.select("#us-map-10-chart svg .year-marker");
+  if (marker.empty()) return;
+  // recompute x position from current scale
+  const container = document.getElementById("us-map-10-chart");
+  const W_total = container.clientWidth;
+  const W = W_total - 40 - 14;     // matches the margins in renderSlide10DetailChart
+  const xPos = 40 + (slide10Year - 1850) / (2100 - 1850) * W;
+  marker.attr("x1", xPos - 40).attr("x2", xPos - 40);
+}
+
+// NEW: hide the chart panel
+function hideDetailChart() {
+  const container = document.getElementById("us-map-10-chart");
+  if (!container) return;
+  container.style.display = "none";
+  d3.select("#us-map-10-chart svg").remove();
+  d3.select("#us-map-10-chart .chart-error").remove();
+}
+
 
 //Helpers
 
