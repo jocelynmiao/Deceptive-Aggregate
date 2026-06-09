@@ -1384,7 +1384,7 @@ async function slideTenUSStates() {
   const src    = document.getElementById("year-source-10");
   if (slider) {
     slider.min   = minYear;
-    slider.max   = maxYear;
+    slider.max   = maxYear-1;
     slider.value = slide10Year;
     if (label) label.textContent = slide10Year;
     if (src)   src.textContent = slide10Year > histMax ? "Projected (SSP2-4.5)" : "Historical (CMIP6)";
@@ -1406,6 +1406,7 @@ async function slideTenUSStates() {
     [wBtn, sBtn, aBtn].forEach(b => b?.classList.remove("active"));
     btnOn?.classList.add("active");
     renderSlide10Map(histCountry, projCountry, histState, projState, histMax);
+    updateTradeoffHighlight();
     if (slide10Selected) renderSlide10DetailChart();
   };
   wBtn?.addEventListener("click", () => setSeason("winter", wBtn));
@@ -1544,10 +1545,9 @@ function renderSlide10US(usTemp, stateTempMap) {
   const width  = container.clientWidth  || 700;
   const height = container.clientHeight || 280;
 
-  // Quantized state-level color scales (same buckets as slides 8/9)
-  const color = slide10Season === "winter"
-    ? d3.scaleQuantize().domain([-15, 20]).range(d3.quantize(d3.interpolateBlues, 6))
-    : d3.scaleQuantize().domain([5,  40]).range(d3.quantize(d3.interpolateOrRd, 6));
+  // stateTempMap always contains anomaly values (curr − 1850 baseline),
+  // so use a diverging anomaly scale regardless of season.
+  const color = anomalyColor(-1, 0, 3);
 
   const usFeature = geoDataGlobal.features.find(isUS);
   if (!usFeature) return;
@@ -1601,11 +1601,12 @@ function renderSlide10US(usTemp, stateTempMap) {
       .attr("opacity", 0)
       .on("mousemove", (event, f) => {
         const t = stateTempMap.get(f.properties.name);
-        const seasonLbl = slide10Season === "winter" ? "Winter" : "Summer";
+        const seasonLbl = slide10Season === "annual" ? "Annual avg"
+          : slide10Season === "winter" ? "Winter" : "Summer";
         showTip(event,
           `<strong>${f.properties.name}</strong>` +
           (t != null
-            ? `${slide10Year} ${seasonLbl}: ${t.toFixed(1)} °C<br><span style="opacity:0.6;font-size:0.7rem;">Click to see trajectory</span>`
+            ? `${slide10Year} ${seasonLbl}: ${t >= 0 ? "+" : ""}${t.toFixed(1)} °C vs 1850<br><span style="opacity:0.6;font-size:0.7rem;">Click to see trajectory</span>`
             : `<span style="opacity:0.7;">No data for ${f.properties.name}</span>`)
         );
       })
