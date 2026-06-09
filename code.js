@@ -341,6 +341,7 @@ const slides = [
             <div class="season-toggle">
               <button class="season-btn active" id="btn-10-winter">❄️ Winter</button>
               <button class="season-btn" id="btn-10-summer">☀️ Summer</button>
+              <button class="season-btn" id="btn-10-annual">📅 Annual</button>
             </div>
           </div>
  
@@ -1409,18 +1410,32 @@ async function slideTenUSStates() {
     renderSlide10Map(histCountry, projCountry, histState, projState, histMax);
   });
 
-  const wBtn = document.getElementById("btn-10-winter");
-  const sBtn = document.getElementById("btn-10-summer");
+  const wBtn   = document.getElementById("btn-10-winter");
+  const sBtn   = document.getElementById("btn-10-summer");
+  const aBtn   = document.getElementById("btn-10-annual");
+  const snBtns = [wBtn, sBtn, aBtn];
   wBtn?.addEventListener("click", () => {
     slide10Season = "winter";
+    snBtns.forEach(b => b?.classList.remove("active"));
     wBtn.classList.add("active");
-    sBtn?.classList.remove("active");
+    d3.select("#us-map-10 svg").remove();
+    updateTradeoffHighlight();
     renderSlide10Map(histCountry, projCountry, histState, projState, histMax);
   });
   sBtn?.addEventListener("click", () => {
     slide10Season = "summer";
+    snBtns.forEach(b => b?.classList.remove("active"));
     sBtn.classList.add("active");
-    wBtn?.classList.remove("active");
+    d3.select("#us-map-10 svg").remove();
+    updateTradeoffHighlight();
+    renderSlide10Map(histCountry, projCountry, histState, projState, histMax);
+  });
+  aBtn?.addEventListener("click", () => {
+    slide10Season = "annual";
+    snBtns.forEach(b => b?.classList.remove("active"));
+    aBtn.classList.add("active");
+    d3.select("#us-map-10 svg").remove();
+    updateTradeoffHighlight();
     renderSlide10Map(histCountry, projCountry, histState, projState, histMax);
   });
  
@@ -1428,13 +1443,24 @@ async function slideTenUSStates() {
   updateTradeoffHighlight();
 }
 
-// Highlights the tradeoff-row that matches the current level (subtle narrative link).
+// Highlights the tradeoff-row(s) matching the current level and season.
+// Level and annual are independent — both can be active simultaneously.
 function updateTradeoffHighlight() {
-  document.querySelectorAll("#us-map-10 ~ .text-panel .tradeoff-row, .text-panel .tradeoff-row")
+  document.querySelectorAll(".text-panel .tradeoff-row")
     .forEach(row => row.classList.remove("active-row"));
-  const target = slide10Level === "us" ? "state" : slide10Level === "global" ? "global" : "country";
-  const row = document.querySelector(`.tradeoff-row[data-level="${target}"]`);
-  if (row) row.classList.add("active-row");
+
+  // Level row: global → global, countries → country, us → state
+  const levelTarget = slide10Level === "global" ? "global"
+    : slide10Level === "countries" ? "country"
+    : "state";
+  const levelRow = document.querySelector(`.tradeoff-row[data-level="${levelTarget}"]`);
+  if (levelRow) levelRow.classList.add("active-row");
+
+  // Annual row: always highlight when annual season is selected
+  if (slide10Season === "annual") {
+    const annualRow = document.querySelector(`.tradeoff-row[data-level="annual"]`);
+    if (annualRow) annualRow.classList.add("active-row");
+  }
 }
  
 // Top-level render dispatcher — picks the right view for current level
@@ -1442,29 +1468,42 @@ function renderSlide10Map(histCountry, projCountry, histState, projState, histMa
   const isProjected = slide10Year > histMaxYear;
   const countryRows = isProjected ? projCountry : histCountry;
   const stateRows   = isProjected ? projState   : histState;
+  const seasons     = slide10Season === "annual" ? ["winter", "summer"] : [slide10Season];
 
-  // Current year maps
-  const tempMap = buildSeasonalTempMap(countryRows, slide10Year, slide10Season);
+  // Helper: average a value across both seasons per key
+  function buildAnnualMap(rows, year, keyField, valField) {
+    const acc = new Map();
+    seasons.forEach(s => {
+      rows.filter(r => +r.year === year && r.season === s).forEach(r => {
+        const key = r[keyField];
+        const v   = +r[valField];
+        if (!isNaN(v)) {
+          const prev = acc.get(key) || { sum: 0, n: 0 };
+          acc.set(key, { sum: prev.sum + v, n: prev.n + 1 });
+        }
+      });
+    });
+    return new Map([...acc].map(([k, { sum, n }]) => [k, sum / n]));
+  }
 
-  // 1850 baseline maps (always from historical)
-  const baseCountryMap = buildSeasonalTempMap(histCountry, 1850, slide10Season);
-  const baseStateTempMap = new Map();
-  histState.forEach(r => {
-    if (+r.year === 1850 && r.season === slide10Season) {
-      baseStateTempMap.set(r.state, +r.mean_temp_c);
-    }
-  });
+  // Current year country temps
+  const tempMap     = buildAnnualMap(countryRows, slide10Year, "country", "mean_temp");
+  // 1850 baseline country temps
+  const baseCountryMap = buildAnnualMap(histCountry, 1850, "country", "mean_temp");
 
-  // Diff: current − 1850
+  // Current year state temps
+  const currStateMap = buildAnnualMap(stateRows, slide10Year, "state", "mean_temp_c");
+  // 1850 baseline state temps
+  const baseStateMap = buildAnnualMap(histState, 1850, "state", "mean_temp_c");
+
+  // State diff: current − 1850
   const stateTempMap = new Map();
-  stateRows.forEach(r => {
-    if (+r.year === slide10Year && r.season === slide10Season) {
-      const base = baseStateTempMap.get(r.state);
-      const curr = +r.mean_temp_c;
-      if (base != null && !isNaN(curr)) stateTempMap.set(r.state, curr - base);
-    }
+  currStateMap.forEach((curr, state) => {
+    const base = baseStateMap.get(state);
+    if (base != null) stateTempMap.set(state, curr - base);
   });
 
+  // Annotate geo features with country diff
   geoDataGlobal.features.forEach(f => {
     const name = nameFixes[f.properties.name] ?? f.properties.name;
     const curr = tempMap.get(name) ?? null;
@@ -1482,18 +1521,20 @@ function renderSlide10Map(histCountry, projCountry, histState, projState, histMa
   } else if (slide10Level === "countries") {
     renderSlide10Countries();
   } else if (slide10Level === "global") {
-    const isProjected = slide10Year > histMaxYear;
-    const rows = isProjected ? projCountry : histCountry;
-    const vals = rows
-      .filter(r => +r.year === slide10Year && r.season === slide10Season)
-      .map(r => +r.mean_temp)
-      .filter(v => !isNaN(v));
+    const vals = seasons.flatMap(s =>
+      (isProjected ? projCountry : histCountry)
+        .filter(r => +r.year === slide10Year && r.season === s)
+        .map(r => +r.mean_temp)
+        .filter(v => !isNaN(v))
+    );
     const avg = vals.length ? d3.mean(vals) : null;
 
-    const baseVals = histCountry
-      .filter(r => +r.year === 1850 && r.season === slide10Season)
-      .map(r => +r.mean_temp)
-      .filter(v => !isNaN(v));
+    const baseVals = seasons.flatMap(s =>
+      histCountry
+        .filter(r => +r.year === 1850 && r.season === s)
+        .map(r => +r.mean_temp)
+        .filter(v => !isNaN(v))
+    );
     const baseAvg = baseVals.length ? d3.mean(baseVals) : null;
 
     const anomaly = (avg != null && baseAvg != null) ? avg - baseAvg : null;
@@ -1519,7 +1560,7 @@ function renderSlide10US(usTemp, stateTempMap) {
       })
       .on("mousemove", (event, f) => {
         const t = stateTempMap.get(f.properties.name);
-        const seasonLbl = slide10Season === "winter" ? "Winter" : "Summer";
+        const seasonLbl = slide10Season === "annual" ? "Annual" : slide10Season === "winter" ? "Winter" : "Summer";
         showTip(event,
           `<strong>${f.properties.name}</strong><br>` +
           (t != null
@@ -1584,7 +1625,7 @@ function renderSlide10US(usTemp, stateTempMap) {
       .attr("opacity", 0)
       .on("mousemove", (event, f) => {
         const t = stateTempMap.get(f.properties.name);
-        const seasonLbl = slide10Season === "winter" ? "Winter" : "Summer";
+        const seasonLbl = slide10Season === "annual" ? "Annual" : slide10Season === "winter" ? "Winter" : "Summer";
         showTip(event,
           `<strong>${f.properties.name}</strong><br>` +
           (t != null
