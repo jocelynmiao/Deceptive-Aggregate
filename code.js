@@ -330,11 +330,8 @@ const slides = [
             <div style="font-family:var(--font-ui);font-size:0.7rem;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px;">Level</div>
             <div class="season-toggle">
               <button class="season-btn active" id="btn-10-us">🇺🇸 U.S.</button>
-              <button class="season-btn" id="btn-10-world" disabled
-                      style="opacity:0.4;cursor:not-allowed;"
-                      title="Coming soon: world-level explorer">
-                🌍 World <span style="font-size:0.7em;opacity:0.7">(coming)</span>
-              </button>
+              <button class="season-btn" id="btn-10-countries">🌍 Countries</button>
+              <button class="season-btn" id="btn-10-global">🌐 Global</button>
             </div>
           </div>
  
@@ -565,9 +562,9 @@ function initMapOne() {
       const t = globalDataState.averageTemperature;
       const readout = document.getElementById("globe-temp-readout");
       if (readout) readout.textContent = t != null
-        ? `Global average: ${t.toFixed(2)} °C`
+        ? `Global anomaly vs 1850: ${t >= 0 ? "+" : ""}${t.toFixed(2)} °C`
         : "No data for this year";
-      showTip(event, `<strong>Global Average</strong>${t != null ? t.toFixed(2) + " °C" : "No data"}`);
+      showTip(event, `<strong>Global Average</strong><br>${t != null ? (t >= 0 ? "+" : "") + t.toFixed(2) + " °C vs 1850" : "No data"}`);
     })
     .on("mouseleave", hideTip);
 }
@@ -575,15 +572,19 @@ function initMapOne() {
 function updateMapOne(year) {
   const yearData   = climateDataGlobal.filter(d => +d.year === year);
   const validTemps = yearData.map(d => +d.mean_temp).filter(t => !isNaN(t));
-  const avg        = validTemps.length
-    ? validTemps.reduce((s, t) => s + t, 0) / validTemps.length
-    : null;
+  const avg        = validTemps.length ? d3.mean(validTemps) : null;
 
-  globalDataState.averageTemperature = avg;
-  const colorOne = d3.scaleSequential().domain([0, 30]).interpolator(d3.interpolateReds);
+  const base1850   = climateDataGlobal.filter(d => +d.year === 1850);
+  const baseTemps  = base1850.map(d => +d.mean_temp).filter(t => !isNaN(t));
+  const baseAvg    = baseTemps.length ? d3.mean(baseTemps) : null;
+
+  const anomaly = (avg != null && baseAvg != null) ? avg - baseAvg : null;
+
+  globalDataState.averageTemperature = anomaly;
+  const color = anomalyColor(-1, 0, 3);
   d3.select("#map svg .global-landmass")
     .transition().duration(120)
-    .attr("fill", avg == null ? "rgba(255,255,255,0.06)" : colorOne(avg));
+    .attr("fill", anomaly == null ? "rgba(255,255,255,0.06)" : color(anomaly));
 }
 
 //slide 2
@@ -1382,6 +1383,32 @@ async function slideTenUSStates() {
     };
   }
 
+  const usLvlBtn  = document.getElementById("btn-10-us");
+  const ctrLvlBtn = document.getElementById("btn-10-countries");
+  const glbLvlBtn = document.getElementById("btn-10-global");
+  const lvlBtns   = [usLvlBtn, ctrLvlBtn, glbLvlBtn];
+  usLvlBtn?.addEventListener("click", () => {
+    slide10Level = "us";
+    lvlBtns.forEach(b => b?.classList.remove("active"));
+    usLvlBtn.classList.add("active");
+    updateTradeoffHighlight();
+    renderSlide10Map(histCountry, projCountry, histState, projState, histMax);
+  });
+  ctrLvlBtn?.addEventListener("click", () => {
+    slide10Level = "countries";
+    lvlBtns.forEach(b => b?.classList.remove("active"));
+    ctrLvlBtn.classList.add("active");
+    updateTradeoffHighlight();
+    renderSlide10Map(histCountry, projCountry, histState, projState, histMax);
+  });
+  glbLvlBtn?.addEventListener("click", () => {
+    slide10Level = "global";
+    lvlBtns.forEach(b => b?.classList.remove("active"));
+    glbLvlBtn.classList.add("active");
+    updateTradeoffHighlight();
+    renderSlide10Map(histCountry, projCountry, histState, projState, histMax);
+  });
+
   const wBtn = document.getElementById("btn-10-winter");
   const sBtn = document.getElementById("btn-10-summer");
   wBtn?.addEventListener("click", () => {
@@ -1405,7 +1432,7 @@ async function slideTenUSStates() {
 function updateTradeoffHighlight() {
   document.querySelectorAll("#us-map-10 ~ .text-panel .tradeoff-row, .text-panel .tradeoff-row")
     .forEach(row => row.classList.remove("active-row"));
-  const target = slide10Level === "us" ? "state" : "country";
+  const target = slide10Level === "us" ? "state" : slide10Level === "global" ? "global" : "country";
   const row = document.querySelector(`.tradeoff-row[data-level="${target}"]`);
   if (row) row.classList.add("active-row");
 }
@@ -1452,25 +1479,66 @@ function renderSlide10Map(histCountry, projCountry, histState, projState, histMa
       return c != null && b != null ? c - b : null;
     })();
     renderSlide10US(usCountryDiff, stateTempMap);
+  } else if (slide10Level === "countries") {
+    renderSlide10Countries();
+  } else if (slide10Level === "global") {
+    const isProjected = slide10Year > histMaxYear;
+    const rows = isProjected ? projCountry : histCountry;
+    const vals = rows
+      .filter(r => +r.year === slide10Year && r.season === slide10Season)
+      .map(r => +r.mean_temp)
+      .filter(v => !isNaN(v));
+    const avg = vals.length ? d3.mean(vals) : null;
+
+    const baseVals = histCountry
+      .filter(r => +r.year === 1850 && r.season === slide10Season)
+      .map(r => +r.mean_temp)
+      .filter(v => !isNaN(v));
+    const baseAvg = baseVals.length ? d3.mean(baseVals) : null;
+
+    const anomaly = (avg != null && baseAvg != null) ? avg - baseAvg : null;
+    renderSlide10Global(anomaly);
   }
 }
  
 // renderer — US zoomed, state outlines on top
+// On first call builds the full SVG; on subsequent calls just updates state fills in-place.
 function renderSlide10US(usTemp, stateTempMap) {
-  d3.select("#us-map-10 svg").remove();
- 
   const container = document.querySelector("#us-map-10");
   if (!container) return;
- 
+
+  const color = anomalyColor(-2, 0, 5);
+
+  // If states are already rendered, just update fills in-place — no rebuild, no fade
+  const existingSvg = d3.select("#us-map-10 svg");
+  if (!existingSvg.empty() && !existingSvg.selectAll(".state").empty()) {
+    existingSvg.selectAll(".state")
+      .attr("fill", f => {
+        const t = stateTempMap.get(f.properties.name);
+        return t != null ? color(t) : "rgba(255,255,255,0.04)";
+      })
+      .on("mousemove", (event, f) => {
+        const t = stateTempMap.get(f.properties.name);
+        const seasonLbl = slide10Season === "winter" ? "Winter" : "Summer";
+        showTip(event,
+          `<strong>${f.properties.name}</strong><br>` +
+          (t != null
+            ? `${slide10Year} ${seasonLbl}: ${t >= 0 ? "+" : ""}${t.toFixed(2)} °C vs 1850`
+            : `<span style="opacity:0.7;">No data for ${f.properties.name}</span>`)
+        );
+      });
+    return;
+  }
+
+  // First render — build the full SVG from scratch
+  d3.select("#us-map-10 svg").remove();
+
   const width  = container.clientWidth  || 700;
   const height = container.clientHeight || 420;
- 
-  const color = anomalyColor(-2, 0, 5);
- 
+
   const usFeature = geoDataGlobal.features.find(isUS);
   if (!usFeature) return;
- 
-  // Fit projection to the US bounding box
+
   const projection = d3.geoNaturalEarth1();
   projection.fitSize([width * 0.9, height * 0.9], usFeature);
   projection.translate([
@@ -1478,11 +1546,11 @@ function renderSlide10US(usTemp, stateTempMap) {
     projection.translate()[1] + height * 0.05,
   ]);
   const path = d3.geoPath(projection);
- 
+
   const svg = d3.select("#us-map-10").append("svg")
     .attr("viewBox", `0 0 ${width} ${height}`)
     .attr("width", "100%").attr("height", "100%");
- 
+
   // Faded background world
   svg.selectAll(".country-bg")
     .data(geoDataGlobal.features)
@@ -1492,15 +1560,15 @@ function renderSlide10US(usTemp, stateTempMap) {
     .attr("fill", "#1a1a1a")
     .attr("stroke", "#111").attr("stroke-width", 0.3)
     .attr("opacity", f => isUS(f) ? 0 : 0.04);
- 
-  // US country outline as the base layer underneath the states
+
+  // US country outline as base layer underneath the states
   svg.append("path")
     .datum(usFeature)
     .attr("d", path)
     .attr("fill", "#2a2a2a")
     .attr("stroke", "rgba(255,255,255,0.25)").attr("stroke-width", 0.5);
- 
-  // STATES — colored individually by their own seasonal temperature
+
+  // STATES — fade in once on first load only
   d3.json("data/us-states.geojson").then(statesGeo => {
     if (!statesGeo) return;
     svg.selectAll(".state")
@@ -1510,7 +1578,7 @@ function renderSlide10US(usTemp, stateTempMap) {
       .attr("d", path)
       .attr("fill", f => {
         const t = stateTempMap.get(f.properties.name);
-        return t != null ? color(t) : "rgba(255,255,255,0.04)";  // null → near-invisible
+        return t != null ? color(t) : "rgba(255,255,255,0.04)";
       })
       .attr("stroke", "rgba(255,255,255,0.45)").attr("stroke-width", 0.7)
       .attr("opacity", 0)
@@ -1525,8 +1593,78 @@ function renderSlide10US(usTemp, stateTempMap) {
         );
       })
       .on("mouseleave", hideTip)
-      .transition().duration(500).attr("opacity", 1);
+      .transition().duration(300).attr("opacity", 1);
   }).catch(() => { /* file missing — fail silently */ });
+}
+
+// renderer — world country map (mirrors slide 3 but renders into #us-map-10)
+function renderSlide10Countries() {
+  d3.select("#us-map-10 svg").remove();
+
+  const container = document.querySelector("#us-map-10");
+  if (!container) return;
+
+  const width  = container.clientWidth  || 700;
+  const height = container.clientHeight || 420;
+
+  const svg = d3.select("#us-map-10").append("svg")
+    .attr("viewBox", `0 0 ${width} ${height}`)
+    .attr("width", "100%").attr("height", "100%");
+
+  const projection = d3.geoNaturalEarth1().scale(width / 5.6).translate([width / 2, height / 2]);
+  const path  = d3.geoPath(projection);
+  const color = anomalyColor(-1, 0, 3);
+
+  svg.selectAll("path")
+    .data(geoDataGlobal.features)
+    .join("path")
+    .attr("d", path)
+    .attr("fill", f => f.properties.temperature == null
+      ? "rgba(255,255,255,0.06)"
+      : color(f.properties.temperature))
+    .attr("stroke", "rgba(255,255,255,0.15)").attr("stroke-width", 0.4)
+    .on("mousemove", (event, f) => {
+      const t = f.properties.temperature;
+      showTip(event,
+        `<strong>${f.properties.name}</strong><br>` +
+        (t != null ? `${t >= 0 ? "+" : ""}${t.toFixed(2)} °C vs 1850` : "No data")
+      );
+    })
+    .on("mouseleave", hideTip);
+}
+
+// renderer — single merged landmass colored by global seasonal average (mirrors slide 1)
+function renderSlide10Global(avgTemp) {
+  d3.select("#us-map-10 svg").remove();
+
+  const container = document.querySelector("#us-map-10");
+  if (!container) return;
+
+  const width  = container.clientWidth  || 700;
+  const height = container.clientHeight || 420;
+
+  const svg = d3.select("#us-map-10").append("svg")
+    .attr("viewBox", `0 0 ${width} ${height}`)
+    .attr("width", "100%").attr("height", "100%");
+
+  const proj = d3.geoNaturalEarth1()
+    .scale(width / 5.2)
+    .translate([width / 2, height / 2]);
+
+  const color = anomalyColor(-1, 0, 3);
+
+  svg.append("path")
+    .datum(geoDataGlobal)
+    .attr("d", d3.geoPath(proj))
+    .attr("stroke", "none")
+    .attr("fill", avgTemp == null ? "rgba(255,255,255,0.06)" : color(avgTemp))
+    .on("mousemove", event => {
+      showTip(event,
+        `<strong>Global Average</strong><br>` +
+        (avgTemp != null ? `${avgTemp >= 0 ? "+" : ""}${avgTemp.toFixed(2)} °C vs 1850` : "No data")
+      );
+    })
+    .on("mouseleave", hideTip);
 }
 
 //Helpers
