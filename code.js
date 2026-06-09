@@ -19,6 +19,11 @@ function showTip(event, html) {
 }
 function hideTip() { tooltip.style("display", "none"); }
 
+function anomalyColor(min = -1, mid = 0, max = 3) {
+  return d3.scaleDiverging(t => d3.interpolateRdBu(1 - t))
+    .domain([min, mid, max]);
+}
+
 function aggregateByYear(rows) {
   const byYear = d3.group(rows, d => +d.year);
   return Array.from(byYear, ([year, entries]) => ({
@@ -53,7 +58,7 @@ const slides = [
     </div>`
 },
   {
-    label: "(Introduction Old, please change it and name it whatever you desire) - The Start",
+    label: "Overall Global Temperature",
     content: `
       <div class="slide-layout">
         <div class="text-panel">
@@ -406,7 +411,7 @@ function render(direction = 1) {
       contentEl.style.transform = "";
       contentEl.classList.add("visible");
 
-      if (slide.label === "Introduction")              slideOneMap();
+      if (slide.label === "Overall Global Temperature") slideOneMap();
       if (slide.label === "Global Temperature Trend")  slideTwoChart();
       if (slide.label === "Country-Level Breakdown")   slideThreeMap();
       if (slide.label === "Zooming Into the U.S.")     slideFourUS();
@@ -879,16 +884,22 @@ async function slideThreeMap() {
 function createMapThree(year) {
   const yearData = climateDataGlobal.filter(d => +d.year === year);
   const tempMap  = new Map(yearData.map(d => [d.country, +d.mean_temp]));
-  geoDataGlobal.features.forEach(d => {
-    const name = nameFixes[d.properties.name] ?? d.properties.name;
-    d.properties.temperature = tempMap.get(name) ?? null;
+
+  const base1850 = climateDataGlobal.filter(d => +d.year === 1850);
+  const baseMap  = new Map(base1850.map(d => [d.country, +d.mean_temp]));
+
+  geoDataGlobal.features.forEach(f => {
+    const name = nameFixes[f.properties.name] ?? f.properties.name;
+    const curr = tempMap.get(name) ?? null;
+    const base = baseMap.get(name)  ?? null;
+    f.properties.temperature = (curr != null && base != null) ? curr - base : null;
   });
   renderMapThree();
 }
 
 function renderMapThree() {
   d3.select("#map svg").remove();
-  const mapEl = document.getElementById("map");
+  const mapEl  = document.getElementById("map");
   const width  = mapEl.clientWidth  || 680;
   const height = mapEl.clientHeight || 460;
 
@@ -898,7 +909,7 @@ function renderMapThree() {
 
   const projection = d3.geoNaturalEarth1().scale(width / 5.6).translate([width / 2, height / 2]);
   const path  = d3.geoPath(projection);
-  const color = d3.scaleSequential().domain([0, 30]).interpolator(d3.interpolateReds);
+  const color = anomalyColor(-1, 0, 3);  // ← diverging anomaly scale
 
   svg.selectAll("path")
     .data(geoDataGlobal.features)
@@ -910,9 +921,18 @@ function renderMapThree() {
     .attr("stroke", "rgba(255,255,255,0.15)").attr("stroke-width", 0.4)
     .on("mousemove", (event, d) => {
       const t = d.properties.temperature;
-      showTip(event, `<strong>${d.properties.name}</strong>${t != null ? t.toFixed(1) + " °C" : "No data"}`);
+      showTip(event,
+        `<strong>${d.properties.name}</strong><br>` +
+        (t != null ? `${t >= 0 ? "+" : ""}${t.toFixed(2)} °C vs 1850` : "No data")
+      );
     })
     .on("mouseleave", hideTip);
+
+  // Update colorbar labels
+  const spans = document.querySelectorAll(".colorbar-wrap span");
+  if (spans.length >= 2) { spans[0].textContent = "−1°C"; spans[1].textContent = "+3°C"; }
+  const cb = document.querySelector(".colorbar-wrap .colorbar");
+  if (cb) cb.style.background = "linear-gradient(to right, #2166ac, #f7f7f7, #d73027)";
 }
 
 // Slide 4
@@ -1232,27 +1252,24 @@ function updateColorbarLabel() {
   const lo = document.getElementById("colorbar-low-label");
   const hi = document.getElementById("colorbar-high-label");
   if (!cb) return;
-  if (slide7Season === "winter") {
-    cb.style.background = "linear-gradient(to right, #2166ac, #abd9e9, #f7f7f7)";
-    if (lo) lo.textContent = "−15°C";
-    if (hi) hi.textContent = "20°C";
-  } else {
-    cb.style.background = "linear-gradient(to right, #fee090, #fc8d59, #d73027)";
-    if (lo) lo.textContent = "5°C";
-    if (hi) hi.textContent = "40°C";
-  }
+
+  cb.style.background = "linear-gradient(to right, #2166ac, #f7f7f7, #d73027)";
+  if (lo) lo.textContent = "−2°C";
+  if (hi) hi.textContent = "+5°C";
 }
 
 function renderSeasonWorldMap() {
   d3.select("#map-7 svg").remove();
 
-  const rows = seasonalCache.historical.country || [];
-  const tempMap = buildSeasonalTempMap(rows, slide7Year, slide7Season);
+  const rows    = seasonalCache.historical.country || [];
+  const tempMap = buildSeasonalTempMap(rows, slide7Year,  slide7Season);
+  const baseMap = buildSeasonalTempMap(rows, 1850,        slide7Season);  // ← baseline
 
-  
   geoDataGlobal.features.forEach(f => {
     const name = nameFixes[f.properties.name] ?? f.properties.name;
-    f.properties.seasonTemp = tempMap.get(name) ?? null;
+    const curr = tempMap.get(name) ?? null;
+    const base = baseMap.get(name)  ?? null;
+    f.properties.seasonTemp = (curr != null && base != null) ? curr - base : null;
   });
 
   const mapEl  = document.getElementById("map-7");
@@ -1265,16 +1282,12 @@ function renderSeasonWorldMap() {
 
   const projection = d3.geoNaturalEarth1().scale(width / 5.2).translate([width / 2, height / 2]);
   const path  = d3.geoPath(projection);
-
-
-  const color = slide7Season === "winter"
-    ? d3.scaleSequential().domain([-15, 20]).interpolator(d3.interpolateBlues)
-    : d3.scaleSequential().domain([5, 40]).interpolator(d3.interpolateOrRd);
+  const color = anomalyColor(-2, 0, 5);  // ← seasonal anomaly scale
 
   svg.selectAll("path")
     .data(geoDataGlobal.features)
     .join("path")
-    .attr("d",    path)
+    .attr("d", path)
     .attr("fill", f => f.properties.seasonTemp == null
       ? "rgba(255,255,255,0.06)"
       : color(f.properties.seasonTemp))
@@ -1282,7 +1295,10 @@ function renderSeasonWorldMap() {
     .on("mousemove", (event, f) => {
       const t = f.properties.seasonTemp;
       const label = slide7Season === "winter" ? "Winter" : "Summer";
-      showTip(event, `<strong>${f.properties.name}</strong>${t != null ? `${label}: ${t.toFixed(1)} °C` : "No data"}`);
+      showTip(event,
+        `<strong>${f.properties.name}</strong><br>` +
+        (t != null ? `${label}: ${t >= 0 ? "+" : ""}${t.toFixed(2)} °C vs 1850` : "No data")
+      );
     })
     .on("mouseleave", hideTip);
 
@@ -1396,24 +1412,43 @@ function renderSlide10Map(histCountry, projCountry, histState, projState, histMa
   const isProjected = slide10Year > histMaxYear;
   const countryRows = isProjected ? projCountry : histCountry;
   const stateRows   = isProjected ? projState   : histState;
- 
+
+  // Current year maps
   const tempMap = buildSeasonalTempMap(countryRows, slide10Year, slide10Season);
- 
-  // Build a (state name → temperature) map for the current year and season
+
+  // 1850 baseline maps (always from historical)
+  const baseCountryMap = buildSeasonalTempMap(histCountry, 1850, slide10Season);
+  const baseStateTempMap = new Map();
+  histState.forEach(r => {
+    if (+r.year === 1850 && r.season === slide10Season) {
+      baseStateTempMap.set(r.state, +r.mean_temp_c);
+    }
+  });
+
+  // Diff: current − 1850
   const stateTempMap = new Map();
   stateRows.forEach(r => {
     if (+r.year === slide10Year && r.season === slide10Season) {
-      stateTempMap.set(r.state, +r.mean_temp_c);
+      const base = baseStateTempMap.get(r.state);
+      const curr = +r.mean_temp_c;
+      if (base != null && !isNaN(curr)) stateTempMap.set(r.state, curr - base);
     }
   });
- 
+
   geoDataGlobal.features.forEach(f => {
     const name = nameFixes[f.properties.name] ?? f.properties.name;
-    f.properties.temperature = tempMap.get(name) ?? null;
+    const curr = tempMap.get(name) ?? null;
+    const base = baseCountryMap.get(name) ?? null;
+    f.properties.temperature = (curr != null && base != null) ? curr - base : null;
   });
- 
+
   if (slide10Level === "us") {
-    renderSlide10US(tempMap.get("United States of America"), stateTempMap);
+    const usCountryDiff = (() => {
+      const c = tempMap.get("United States of America");
+      const b = baseCountryMap.get("United States of America");
+      return c != null && b != null ? c - b : null;
+    })();
+    renderSlide10US(usCountryDiff, stateTempMap);
   }
 }
  
@@ -1427,10 +1462,7 @@ function renderSlide10US(usTemp, stateTempMap) {
   const width  = container.clientWidth  || 700;
   const height = container.clientHeight || 420;
  
-  // Same season-aware color scales as slides 7/8/9 — kept for visual consistency.
-  const color = slide10Season === "winter"
-    ? d3.scaleSequential().domain([-15, 20]).interpolator(d3.interpolateBlues).clamp(true)
-    : d3.scaleSequential().domain([5,  40]).interpolator(d3.interpolateOrRd).clamp(true);
+  const color = anomalyColor(-2, 0, 5);
  
   const usFeature = geoDataGlobal.features.find(isUS);
   if (!usFeature) return;
@@ -1483,9 +1515,9 @@ function renderSlide10US(usTemp, stateTempMap) {
         const t = stateTempMap.get(f.properties.name);
         const seasonLbl = slide10Season === "winter" ? "Winter" : "Summer";
         showTip(event,
-          `<strong>${f.properties.name}</strong>` +
+          `<strong>${f.properties.name}</strong><br>` +
           (t != null
-            ? `${slide10Year} ${seasonLbl}: ${t.toFixed(1)} °C`
+            ? `${slide10Year} ${seasonLbl}: ${t >= 0 ? "+" : ""}${t.toFixed(2)} °C vs 1850`
             : `<span style="opacity:0.7;">No data for ${f.properties.name}</span>`)
         );
       })
