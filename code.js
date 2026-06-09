@@ -20,8 +20,12 @@ function showTip(event, html) {
 function hideTip() { tooltip.style("display", "none"); }
 
 function anomalyColor(min = -1, mid = 0, max = 3) {
-  return d3.scaleDiverging(t => d3.interpolateRdBu(1 - t))
+  // 7 discrete bins across the diverging RdBu range
+  const continuous = d3.scaleDiverging(t => d3.interpolateRdBu(1 - t))
     .domain([min, mid, max]);
+  return d3.scaleQuantize()
+    .domain([min, max])
+    .range(d3.quantize(t => continuous(min + t * (max - min)), 7));
 }
 
 function aggregateByYear(rows) {
@@ -1027,8 +1031,8 @@ async function paintUSSeasonMap(containerSelector, season, scenario, year) {
   const height = container.clientHeight || 500;
  
   const color = season === "winter"
-    ? d3.scaleSequential().domain([-15, 20]).interpolator(d3.interpolateBlues)
-    : d3.scaleSequential().domain([5,  40]).interpolator(d3.interpolateOrRd);
+    ? d3.scaleQuantize().domain([-15, 20]).range(d3.quantize(d3.interpolateBlues, 6))
+    : d3.scaleQuantize().domain([5, 40]).range(d3.quantize(d3.interpolateOrRd, 6));
  
   const svg = d3.select(containerSelector).append("svg")
     .attr("viewBox", `0 0 ${width} ${height}`)
@@ -1097,8 +1101,8 @@ async function paintUSSeasonMapLocked(containerSelector, season, scenario, year)
   const height = container.clientHeight || 500;
 
   const color = season === "winter"
-    ? d3.scaleSequential().domain([-15, 20]).interpolator(d3.interpolateBlues)
-    : d3.scaleSequential().domain([5, 40]).interpolator(d3.interpolateOrRd);
+    ? d3.scaleQuantize().domain([-15, 20]).range(d3.quantize(d3.interpolateBlues, 6))
+    : d3.scaleQuantize().domain([5, 40]).range(d3.quantize(d3.interpolateOrRd, 6));
 
   const usFeature = geoDataGlobal.features.find(isUS);
   if (!usFeature) return;
@@ -1152,7 +1156,7 @@ function buildLockedUSMap(containerSelector, highlight) {
 
   const width  = container.clientWidth  || 700;
   const height = container.clientHeight || 500;
-  const color  = d3.scaleSequential().domain([0, 30]).interpolator(d3.interpolateReds);
+  const color  = d3.scaleQuantize().domain([0, 30]).range(d3.quantize(d3.interpolateReds, 6));
 
   const usFeature = geoDataGlobal.features.find(isUS);
   if (!usFeature) return;
@@ -1418,8 +1422,7 @@ async function slideTenUSStates() {
     slide10Season = "winter";
     snBtns.forEach(b => b?.classList.remove("active"));
     wBtn.classList.add("active");
-    d3.select("#us-map-10 svg").remove();
-    updateTradeoffHighlight();
+    d3.select("#us-map-10 svg").remove(); // force full rebuild on season change
     renderSlide10Map(histCountry, projCountry, histState, projState, histMax);
   });
   sBtn?.addEventListener("click", () => {
@@ -1427,7 +1430,6 @@ async function slideTenUSStates() {
     snBtns.forEach(b => b?.classList.remove("active"));
     sBtn.classList.add("active");
     d3.select("#us-map-10 svg").remove();
-    updateTradeoffHighlight();
     renderSlide10Map(histCountry, projCountry, histState, projState, histMax);
   });
   aBtn?.addEventListener("click", () => {
@@ -1435,7 +1437,6 @@ async function slideTenUSStates() {
     snBtns.forEach(b => b?.classList.remove("active"));
     aBtn.classList.add("active");
     d3.select("#us-map-10 svg").remove();
-    updateTradeoffHighlight();
     renderSlide10Map(histCountry, projCountry, histState, projState, histMax);
   });
  
@@ -1737,7 +1738,7 @@ function buildZoomedUSMap(containerSelector, highlight) {
  
   const width  = container.clientWidth  || 700;
   const height = container.clientHeight || 500;
-  const color  = d3.scaleSequential().domain([0, 30]).interpolator(d3.interpolateReds);
+  const color  = d3.scaleQuantize().domain([0, 30]).range(d3.quantize(d3.interpolateReds, 6));
  
   const svg = d3.select(containerSelector).append("svg")
     .attr("viewBox", `0 0 ${width} ${height}`)
