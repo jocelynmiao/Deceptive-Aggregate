@@ -6,7 +6,7 @@ let climateDataGlobal = null;
 // Seasonal caches: { historical: { global, country, us }, ssp245: { ... } }
 const seasonalCache = { historical: {}, ssp245: {} };
 
-let currentYear  = 1900;
+let currentYear  = 1851;
 let currentSlide = 0;
 
 const tooltip = d3.select("#d3-tooltip");
@@ -110,7 +110,7 @@ const slides = [
           <p>But a lot can be revealed by looking at the country-level data. Move the slider ... etc</p>
           <div style="margin-top:20px;">
             <input id="year-slider" type="range" min="1850" max="2014" step="1" value="1900">
-            <div class="year-display" id="year-label">1900</div>
+            <div class="year-display" id="year-label">1851</div>
           </div>
           <div class="colorbar-wrap" style="margin-top:28px;">
             <span>0°C</span>
@@ -238,7 +238,7 @@ const slides = [
           </div>
           <div style="margin-top:20px;">
             <input id="year-slider-7" type="range" min="1850" max="2014" step="1" value="1900">
-            <div class="year-display" id="year-label-7">1900</div>
+            <div class="year-display" id="year-label-7">1851</div>
           </div>
           <div class="colorbar-wrap" style="margin-top:20px;">
             <span id="colorbar-low-label">−10°C</span>
@@ -351,7 +351,7 @@ const slides = [
           <div>
             <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
               <div style="font-family:var(--font-ui);font-size:0.7rem;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;">Year</div>
-              <div class="year-display" id="year-label-10" style="font-size:1.3rem;">2014</div>
+              <div class="year-display" id="year-label-10" style="font-size:1.3rem;">1851</div>
             </div>
             <input id="year-slider-10" type="range" min="1850" max="2100" step="1" value="2014">
             <div id="year-source-10" style="font-family:var(--font-ui);font-size:0.7rem;color:var(--muted);margin-top:4px;">Historical (CMIP6)</div>
@@ -1202,12 +1202,16 @@ function buildLockedUSMap(containerSelector, highlight) {
 // Slide 7
 
 let slide7Season = "winter";
-let slide7Year   = 1900;
-let slide10Year   = 2014;
+let slide7Year   = 1851;
+let slide10Year   = 1851;
 let slide10Season = "winter";
 let slide10Level  = "us"; // This is temporarly for later additions, specifically for more detailed level
 
 async function slideSevenWorld() {
+  const slider7 = document.getElementById("year-slider-7");
+  const label7  = document.getElementById("year-label-7");
+  if (slider7 && label7) { slider7.value = slide7Year; label7.textContent = slide7Year; }
+
   await ensureBaseData();
   d3.select("#map-7").html("");
 
@@ -1216,17 +1220,12 @@ async function slideSevenWorld() {
     ensureSeasonalData("global",  "historical"),
   ]);
 
-  slide7Year = currentYear;
   renderSeasonWorldMap();
 
-  const slider = document.getElementById("year-slider-7");
-  const label  = document.getElementById("year-label-7");
-  if (slider && label) {
-    slider.value = slide7Year;
-    label.textContent = slide7Year;
-    slider.oninput = e => {
+  if (slider7 && label7) {
+    slider7.oninput = e => {
       slide7Year = +e.target.value;
-      label.textContent = slide7Year;
+      label7.textContent = slide7Year;
       renderSeasonWorldMap();
     };
   }
@@ -1345,6 +1344,10 @@ const slide10StateCache = { historical: null, ssp245: null };
    }
 
 async function slideTenUSStates() {
+  const slider10 = document.getElementById("year-slider-10");
+  const label10  = document.getElementById("year-label-10");
+  if (slider10 && label10) { slider10.value = slide10Year; label10.textContent = slide10Year; }
+
   d3.select("#us-map-10").html("");
   await ensureBaseData();
  
@@ -1362,12 +1365,12 @@ async function slideTenUSStates() {
   const maxYear   = projYears[projYears.length - 1] || histYears[histYears.length - 1];
   const histMax   = histYears[histYears.length - 1];
  
-  const slider = document.getElementById("year-slider-10");
-  const label  = document.getElementById("year-label-10");
+  const slider = slider10;
+  const label  = label10;
   const src    = document.getElementById("year-source-10");
   if (slider) {
     slider.min   = minYear;
-    slider.max   = maxYear;
+    slider.max   = maxYear-1;
     slider.value = slide10Year;
     if (label) label.textContent = slide10Year;
     if (src)   src.textContent = slide10Year > histMax ? "Projected (SSP2-4.5)" : "Historical (CMIP6)";
