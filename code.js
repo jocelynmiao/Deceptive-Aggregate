@@ -76,10 +76,11 @@ const slides = [
             </div>
           </div>
           <div class="colorbar-wrap" style="margin-top:24px;">
-            <span>0°C</span>
-            <div class="colorbar"></div>
-            <span>30°C</span>
+            <span style="font-size:0.7rem;color:var(--muted);">−1°C</span>
+            <div class="colorbar colorbar-div colorbar-anomaly" style="flex:1;"></div>
+            <span style="font-size:0.7rem;color:var(--muted);">+3°C</span>
           </div>
+          <div style="font-family:var(--font-ui);font-size:0.65rem;color:var(--muted);margin-top:4px;text-align:center;letter-spacing:0.04em;">anomaly vs 1850 baseline</div>
         </div>
         <div id="map"></div>
       </div>`
@@ -97,11 +98,8 @@ const slides = [
         <button class="chart-btn secondary" id="btn-reset" disabled>Reset to Historical</button>
       </div>
       <div id="chart"></div>
-      <div id="legend">
-        <span><span class="legend-swatch" style="background:#4a90c4"></span>Historical (CMIP6)</span>
-        <span id="legend-proj" style="display:none">
-          <span class="legend-swatch" style="background:#c0392b"></span>Projected SSP2-4.5
-        </span>
+      <div id="legend" style="display:none">
+        <!-- legend moved into SVG overlay -->
       </div>`
   },
   {
@@ -112,14 +110,28 @@ const slides = [
           <h3>Slide 03 — Geographic Disaggregation</h3>
           <h2>Average Temperature<br>by Country</h2>
           <p>But a lot can be revealed by looking at the country-level data. Move the slider ... etc</p>
-          <div style="margin-top:20px;">
-            <input id="year-slider" type="range" min="1850" max="2014" step="1" value="1900">
-            <div class="year-display" id="year-label">1851</div>
-          </div>
-          <div class="colorbar-wrap" style="margin-top:28px;">
-            <span>0°C</span>
-            <div class="colorbar"></div>
-            <span>30°C</span>
+          <div class="controls-box" style="margin:18px 0 0; padding:14px; border:1px solid var(--border); background:rgba(255,255,255,0.02);">
+            <div>
+              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+                <div style="font-family:var(--font-ui);font-size:0.7rem;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;">Year</div>
+                <div class="year-display" id="year-label" style="font-size:1.3rem;">1851</div>
+              </div>
+              <div class="slider-step-row">
+                <input id="year-slider" type="range" min="1850" max="2014" step="1" value="1900">
+              </div>
+              <div class="slider-btn-row">
+                <button class="step-btn" id="step-3-back5">« −5</button>
+                <button class="step-btn" id="step-3-back1">‹ −1</button>
+                <button class="step-btn" id="step-3-fwd1">+1 ›</button>
+                <button class="step-btn" id="step-3-fwd5">+5 »</button>
+              </div>
+            </div>
+            <div class="colorbar-wrap" style="margin-top:16px;">
+              <span style="font-size:0.7rem;color:var(--muted);">−1°C</span>
+              <div class="colorbar colorbar-div colorbar-anomaly" style="flex:1;"></div>
+              <span style="font-size:0.7rem;color:var(--muted);">+3°C</span>
+            </div>
+            <div style="font-family:var(--font-ui);font-size:0.65rem;color:var(--muted);margin-top:4px;text-align:center;letter-spacing:0.04em;">anomaly vs 1850 baseline</div>
           </div>
         </div>
         <div id="map"></div>
@@ -170,14 +182,18 @@ const slides = [
           <div class="stat-card">
             <div class="stat-value" id="global-temp-readout-5">--</div>
             <div class="stat-label">Global Average (2014)</div>
+            <div style="margin-top:6px;display:flex;align-items:center;gap:6px;">
+              <span id="global-delta-5" style="font-family:var(--font-head);font-size:1.15rem;font-weight:700;color:var(--red);">--</span>
+              <span style="font-family:var(--font-ui);font-size:0.7rem;color:var(--muted);">change since 1850</span>
+            </div>
           </div>
-          <div class="stat-card">
+          <div class="stat-card" style="margin-top:10px;">
             <div class="stat-value" id="us-temp-readout-5">--</div>
             <div class="stat-label">United States Average (2014)</div>
-          </div>
-          <div class="stat-card" id="delta-card" style="margin-top:12px;">
-            <div class="stat-value" id="delta-readout" style="font-size:1.6rem;">--</div>
-            <div class="stat-label">U.S. Change vs. Global Change since 1850</div>
+            <div style="margin-top:6px;display:flex;align-items:center;gap:6px;">
+              <span id="us-delta-5" style="font-family:var(--font-head);font-size:1.15rem;font-weight:700;color:var(--red);">--</span>
+              <span style="font-family:var(--font-ui);font-size:0.7rem;color:var(--muted);">change since 1850</span>
+            </div>
           </div>
         </div>
       </div>
@@ -236,18 +252,34 @@ const slides = [
             Looking even deeper, we can see how our seasons have changed in
             temperatures across the world.
           </p>
-          <div class="season-toggle" style="margin-top:20px;">
-            <button class="season-btn active" id="btn-winter">❄️ Winter</button>
-            <button class="season-btn" id="btn-summer">☀️ Summer</button>
-          </div>
-          <div style="margin-top:20px;">
-            <input id="year-slider-7" type="range" min="1850" max="2014" step="1" value="1900">
-            <div class="year-display" id="year-label-7">1851</div>
-          </div>
-          <div class="colorbar-wrap" style="margin-top:20px;">
-            <span id="colorbar-low-label">−10°C</span>
-            <div class="colorbar colorbar-div" id="colorbar-7"></div>
-            <span id="colorbar-high-label">35°C</span>
+          <div class="controls-box" style="margin:18px 0 0; padding:14px; border:1px solid var(--border); background:rgba(255,255,255,0.02);">
+            <div style="margin-bottom:12px;">
+              <div style="font-family:var(--font-ui);font-size:0.7rem;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px;">Season</div>
+              <div class="season-toggle">
+                <button class="season-btn active" id="btn-winter">❄️ Winter</button>
+                <button class="season-btn" id="btn-summer">☀️ Summer</button>
+              </div>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+                <div style="font-family:var(--font-ui);font-size:0.7rem;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;">Year</div>
+                <div class="year-display" id="year-label-7" style="font-size:1.3rem;">1851</div>
+              </div>
+              <div class="slider-step-row">
+                <input id="year-slider-7" type="range" min="1850" max="2014" step="1" value="1900">
+              </div>
+              <div class="slider-btn-row">
+                <button class="step-btn" id="step-7-back5">« −5</button>
+                <button class="step-btn" id="step-7-back1">‹ −1</button>
+                <button class="step-btn" id="step-7-fwd1">+1 ›</button>
+                <button class="step-btn" id="step-7-fwd5">+5 »</button>
+              </div>
+            </div>
+            <div class="colorbar-wrap" style="margin-top:16px;">
+              <span id="colorbar-low-label" style="font-size:0.7rem;color:var(--muted);">−10°C</span>
+              <div class="colorbar colorbar-div" id="colorbar-7" style="flex:1;"></div>
+              <span id="colorbar-high-label" style="font-size:0.7rem;color:var(--muted);">35°C</span>
+            </div>
           </div>
         </div>
         <div id="map-7"></div>
@@ -267,16 +299,20 @@ const slides = [
         </p>
         <div id="comparison-cards">
           <div class="stat-card">
+            <div class="stat-value" id="global-winter-1850-avg">--</div>
+            <div class="stat-label">Global Winter Avg (1850)</div>
+            <div style="margin-top:6px;display:flex;align-items:center;gap:6px;">
+              <span id="global-winter-delta" style="font-family:var(--font-head);font-size:1.15rem;font-weight:700;color:var(--red);">--</span>
+              <span style="font-family:var(--font-ui);font-size:0.7rem;color:var(--muted);">change since 1850</span>
+            </div>
+          </div>
+          <div class="stat-card" style="margin-top:10px;">
             <div class="stat-value" id="us-winter-1850">--</div>
             <div class="stat-label">U.S. Winter Avg (1850)</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value" id="us-winter-latest">--</div>
-            <div class="stat-label">U.S. Winter Avg (latest projected)</div>
-          </div>
-          <div class="stat-card" style="margin-top:12px;">
-            <div class="stat-value" id="us-winter-delta" style="color:var(--red);">--</div>
-            <div class="stat-label">Projected Warming (winters)</div>
+            <div style="margin-top:6px;display:flex;align-items:center;gap:6px;">
+              <span id="us-winter-delta" style="font-family:var(--font-head);font-size:1.15rem;font-weight:700;color:var(--red);">--</span>
+              <span style="font-family:var(--font-ui);font-size:0.7rem;color:var(--muted);">change since 1850</span>
+            </div>
           </div>
         </div>
       </div>
@@ -297,16 +333,20 @@ const slides = [
         </p>
         <div id="comparison-cards">
           <div class="stat-card">
+            <div class="stat-value" id="global-summer-1850-avg">--</div>
+            <div class="stat-label">Global Summer Avg (1850)</div>
+            <div style="margin-top:6px;display:flex;align-items:center;gap:6px;">
+              <span id="global-summer-delta" style="font-family:var(--font-head);font-size:1.15rem;font-weight:700;color:var(--red);">--</span>
+              <span style="font-family:var(--font-ui);font-size:0.7rem;color:var(--muted);">change since 1850</span>
+            </div>
+          </div>
+          <div class="stat-card" style="margin-top:10px;">
             <div class="stat-value" id="us-summer-1850">--</div>
             <div class="stat-label">U.S. Summer Avg (1850)</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value" id="us-summer-latest">--</div>
-            <div class="stat-label">U.S. Summer Avg (latest projected)</div>
-          </div>
-          <div class="stat-card" style="margin-top:12px;">
-            <div class="stat-value" id="us-summer-delta" style="color:var(--red);">--</div>
-            <div class="stat-label">Projected Warming (summers)</div>
+            <div style="margin-top:6px;display:flex;align-items:center;gap:6px;">
+              <span id="us-summer-delta" style="font-family:var(--font-head);font-size:1.15rem;font-weight:700;color:var(--red);">--</span>
+              <span style="font-family:var(--font-ui);font-size:0.7rem;color:var(--muted);">change since 1850</span>
+            </div>
           </div>
         </div>
       </div>
@@ -355,7 +395,15 @@ const slides = [
               <div style="font-family:var(--font-ui);font-size:0.7rem;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;">Year</div>
               <div class="year-display" id="year-label-10" style="font-size:1.3rem;">1851</div>
             </div>
-            <input id="year-slider-10" type="range" min="1850" max="2100" step="1" value="2014">
+            <div class="slider-step-row">
+              <input id="year-slider-10" type="range" min="1850" max="2100" step="1" value="2014">
+            </div>
+            <div class="slider-btn-row">
+              <button class="step-btn" id="step-10-back5">« −5</button>
+              <button class="step-btn" id="step-10-back1">‹ −1</button>
+              <button class="step-btn" id="step-10-fwd1">+1 ›</button>
+              <button class="step-btn" id="step-10-fwd5">+5 »</button>
+            </div>
             <div id="year-source-10" style="font-family:var(--font-ui);font-size:0.7rem;color:var(--muted);margin-top:4px;">Historical (CMIP6)</div>
           </div>
  
@@ -609,6 +657,7 @@ function initMapOne() {
     .attr("stroke", "none")
     .attr("fill", "rgba(255,255,255,0.06)")
     .on("mousemove", event => {
+      window._slide1LastMouseEvent = event;
       const t = globalDataState.averageTemperature;
       const readout = document.getElementById("globe-temp-readout");
       if (readout) readout.textContent = t != null
@@ -616,7 +665,7 @@ function initMapOne() {
         : "No data for this year";
       showTip(event, `<strong>Global Average</strong><br>${t != null ? (t >= 0 ? "+" : "") + t.toFixed(2) + " °C vs 1850" : "No data"}`);
     })
-    .on("mouseleave", hideTip);
+    .on("mouseleave", () => { window._slide1LastMouseEvent = null; hideTip(); });
 }
 
 function updateMapOne(year) {
@@ -804,10 +853,28 @@ async function slideTwoChart() {
   animateLine(histLine, 1400);
   attachTooltip(historicalData);
 
+  // SVG-embedded legend (top-right of chart area)
+  const legendG = g.append("g").attr("class", "chart-legend")
+    .attr("transform", `translate(${W - 180}, 6)`);
+  legendG.append("line").attr("x1", 0).attr("x2", 18).attr("y1", 6).attr("y2", 6)
+    .attr("stroke", "#4a90c4").attr("stroke-width", 2.4);
+  legendG.append("text").attr("x", 22).attr("y", 10)
+    .attr("fill", "#9a9890").style("font-size", "10px").style("font-family", "var(--font-ui)")
+    .text("Historical (CMIP6)");
+
+  const legendProj = g.append("g").attr("class", "chart-legend-proj")
+    .attr("transform", `translate(${W - 180}, 22)`)
+    .style("display", "none");
+  legendProj.append("line").attr("x1", 0).attr("x2", 18).attr("y1", 6).attr("y2", 6)
+    .attr("stroke", "#c0392b").attr("stroke-width", 2.4);
+  legendProj.append("text").attr("x", 22).attr("y", 10)
+    .attr("fill", "#9a9890").style("font-size", "10px").style("font-family", "var(--font-ui)")
+    .text("Projected SSP2-4.5");
+
   document.getElementById("btn-project").addEventListener("click", function () {
     this.disabled = true;
     document.getElementById("btn-reset").disabled = false;
-    document.getElementById("legend-proj").style.display = "inline";
+    svg.select(".chart-legend-proj").style("display", null);
 
     allData = [...historicalData, ...projectedData];
     x.domain(d3.extent(allData, d => d.year));
@@ -888,7 +955,7 @@ async function slideTwoChart() {
   document.getElementById("btn-reset").addEventListener("click", function () {
     this.disabled = true;
     document.getElementById("btn-project").disabled = false;
-    document.getElementById("legend-proj").style.display = "none";
+    svg.select(".chart-legend-proj").style("display", "none");
 
     // Fade out + remove projected layers
     plotG.select(".area-proj").transition().duration(300).attr("fill-opacity", 0).remove();
@@ -930,6 +997,17 @@ async function slideThreeMap() {
     label.textContent = currentYear;
     createMapThree(currentYear);
   });
+
+  function stepYear3(delta) {
+    currentYear = Math.max(+slider.min, Math.min(+slider.max, currentYear + delta));
+    slider.value = currentYear;
+    label.textContent = currentYear;
+    createMapThree(currentYear);
+  }
+  document.getElementById("step-3-back5")?.addEventListener("click", () => stepYear3(-5));
+  document.getElementById("step-3-back1")?.addEventListener("click", () => stepYear3(-1));
+  document.getElementById("step-3-fwd1")?.addEventListener("click",  () => stepYear3( 1));
+  document.getElementById("step-3-fwd5")?.addEventListener("click",  () => stepYear3( 5));
 }
 
 function createMapThree(year) {
@@ -1018,12 +1096,19 @@ async function slideFiveUS() {
   setText("global-temp-readout-5", glbTemp, "°C");
   setText("us-temp-readout-5",     usTemp,  "°C");
 
-  const elDelta = document.getElementById("delta-readout");
-  if (elDelta && usTemp && usTemp0 && glbTemp && glbTemp0) {
-    const diff = (usTemp - usTemp0) - (glbTemp - glbTemp0);
-    const sign = diff >= 0 ? "+" : "";
-    elDelta.textContent = `${sign}${diff.toFixed(2)}°C`;
-    elDelta.style.color = diff >= 0 ? "var(--red)" : "var(--accent2)";
+  // Global change since 1850
+  const elGlobalDelta5 = document.getElementById("global-delta-5");
+  if (elGlobalDelta5 && glbTemp != null && glbTemp0 != null) {
+    const gd = glbTemp - glbTemp0;
+    elGlobalDelta5.textContent = `${gd >= 0 ? "+" : ""}${gd.toFixed(2)}°C`;
+    elGlobalDelta5.style.color = gd >= 0 ? "var(--red)" : "var(--accent2)";
+  }
+  // U.S. change since 1850
+  const elUSDelta5 = document.getElementById("us-delta-5");
+  if (elUSDelta5 && usTemp != null && usTemp0 != null) {
+    const ud = usTemp - usTemp0;
+    elUSDelta5.textContent = `${ud >= 0 ? "+" : ""}${ud.toFixed(2)}°C`;
+    elUSDelta5.style.color = ud >= 0 ? "var(--red)" : "var(--accent2)";
   }
 
   annotateGeoWithYear(year1);
@@ -1046,13 +1131,26 @@ async function slideNineUSSummer() {
   const latestYr  = projYears[0] || 2100;
   const summerN   = lookupSeasonalTemp(projRows, latestYr, "summer");
 
-  setText("us-summer-1850",  summer0, "°C");
-  setText("us-summer-latest", summerN, `°C (${latestYr})`);
+  setText("us-summer-1850", summer0, "°C");
 
+  // Global summer change since 1850
+  const [gHistS] = await Promise.all([ensureSeasonalData("global", "historical")]);
+  const [gProjS] = await Promise.all([ensureSeasonalData("global", "ssp245")]);
+  const globalSummer0 = lookupSeasonalTemp(gHistS, 1850, "summer");
+  const globalSummerN = lookupSeasonalTemp(gProjS, latestYr, "summer");
+  setText("global-summer-1850-avg", globalSummer0, "°C");
+  const elGlobalSD = document.getElementById("global-summer-delta");
+  if (elGlobalSD && globalSummer0 != null && globalSummerN != null) {
+    const gd = globalSummerN - globalSummer0;
+    elGlobalSD.textContent = `${gd >= 0 ? "+" : ""}${gd.toFixed(2)}°C`;
+    elGlobalSD.style.color = gd >= 0 ? "var(--red)" : "var(--accent2)";
+  }
+  // U.S. summer change since 1850
   const elDelta = document.getElementById("us-summer-delta");
   if (elDelta && summer0 != null && summerN != null) {
     const d = summerN - summer0;
-    elDelta.textContent = `+${d.toFixed(2)}°C`;
+    elDelta.textContent = `${d >= 0 ? "+" : ""}${d.toFixed(2)}°C`;
+    elDelta.style.color = d >= 0 ? "var(--red)" : "var(--accent2)";
   }
 
   await paintUSSeasonMapLocked("#us-map-9", "summer", "historical", 2014);
@@ -1282,6 +1380,17 @@ async function slideSevenWorld() {
     };
   }
 
+  function stepYear7(delta) {
+    slide7Year = Math.max(+slider7.min, Math.min(+slider7.max, slide7Year + delta));
+    slider7.value = slide7Year;
+    if (label7) label7.textContent = slide7Year;
+    renderSeasonWorldMap();
+  }
+  document.getElementById("step-7-back5")?.addEventListener("click", () => stepYear7(-5));
+  document.getElementById("step-7-back1")?.addEventListener("click", () => stepYear7(-1));
+  document.getElementById("step-7-fwd1")?.addEventListener("click",  () => stepYear7( 1));
+  document.getElementById("step-7-fwd5")?.addEventListener("click",  () => stepYear7( 5));
+
   document.getElementById("btn-winter").addEventListener("click", () => {
     slide7Season = "winter";
     document.getElementById("btn-winter").classList.add("active");
@@ -1374,13 +1483,26 @@ async function slideEightUSWinter() {
   const latestYr  = projYears[0] || 2100;
   const winterN   = lookupSeasonalTemp(projRows, latestYr, "winter");
 
-  setText("us-winter-1850",  winter0, "°C");
-  setText("us-winter-latest", winterN, `°C (${latestYr})`);
+  setText("us-winter-1850", winter0, "°C");
 
+  // Global winter change since 1850
+  const [gHistW] = await Promise.all([ensureSeasonalData("global", "historical")]);
+  const [gProjW] = await Promise.all([ensureSeasonalData("global", "ssp245")]);
+  const globalWinter0 = lookupSeasonalTemp(gHistW, 1850, "winter");
+  const globalWinterN = lookupSeasonalTemp(gProjW, latestYr, "winter");
+  setText("global-winter-1850-avg", globalWinter0, "°C");
+  const elGlobalWD = document.getElementById("global-winter-delta");
+  if (elGlobalWD && globalWinter0 != null && globalWinterN != null) {
+    const gd = globalWinterN - globalWinter0;
+    elGlobalWD.textContent = `${gd >= 0 ? "+" : ""}${gd.toFixed(2)}°C`;
+    elGlobalWD.style.color = gd >= 0 ? "var(--red)" : "var(--accent2)";
+  }
+  // U.S. winter change since 1850
   const elDelta = document.getElementById("us-winter-delta");
   if (elDelta && winter0 != null && winterN != null) {
     const d = winterN - winter0;
-    elDelta.textContent = `+${d.toFixed(2)}°C`;
+    elDelta.textContent = `${d >= 0 ? "+" : ""}${d.toFixed(2)}°C`;
+    elDelta.style.color = d >= 0 ? "var(--red)" : "var(--accent2)";
   }
   await paintUSSeasonMap("#us-map-8", "winter", "historical", 2014);
 }
@@ -1410,9 +1532,17 @@ async function slideTenUSStates() {
 
   const histYears = [...new Set(histCountry.map(r => +r.year))].sort((a, b) => a - b);
   const projYears = [...new Set(projCountry.map(r => +r.year))].sort((a, b) => a - b);
+  const projYearSet = new Set(projYears);
   const minYear   = histYears[0];
   const maxYear   = projYears[projYears.length - 1] || histYears[histYears.length - 1];
-  const histMax   = histYears[histYears.length - 1];
+  // histMax = last historical year NOT present in the projection dataset.
+  // Using the last overlapping year (e.g. 2015) as the bridge point produces a
+  // large spurious offset because the observed 2015 and the modelled 2015 differ
+  // due to natural variability. 2014 is exclusive to the historical record so
+  // no SSP245 value exists for it → offset defaults to 0, which is correct since
+  // both datasets share the same absolute °C scale.
+  const histMax   = [...histYears].reverse().find(y => !projYearSet.has(y))
+                    ?? histYears[histYears.length - 1];
 
   // Expose a re-render hook so click handlers in renderers can re-render
   // the map to update the selection outline.
@@ -1441,6 +1571,19 @@ async function slideTenUSStates() {
         renderSlide10Map(histCountry, projCountry, histState, projState, histMax);
       });
     };
+
+    function stepYear10(delta) {
+      slide10Year = Math.max(+slider.min, Math.min(+slider.max, slide10Year + delta));
+      slider.value = slide10Year;
+      if (label) label.textContent = slide10Year;
+      if (src)   src.textContent = slide10Year > histMax ? "Projected (SSP2-4.5)" : "Historical (CMIP6)";
+      updateChartYearMarker();
+      renderSlide10Map(histCountry, projCountry, histState, projState, histMax);
+    }
+    document.getElementById("step-10-back5")?.addEventListener("click", () => stepYear10(-5));
+    document.getElementById("step-10-back1")?.addEventListener("click", () => stepYear10(-1));
+    document.getElementById("step-10-fwd1")?.addEventListener("click",  () => stepYear10( 1));
+    document.getElementById("step-10-fwd5")?.addEventListener("click",  () => stepYear10( 5));
   }
 
   // season buttons
@@ -1505,11 +1648,9 @@ function updateTradeoffHighlight() {
 // Top-level render dispatcher — picks the right view for current level
 async function renderSlide10Map(histCountry, projCountry, histState, projState, histMaxYear) {
   const isProjected = slide10Year > histMaxYear;
-  const countryRows = isProjected ? projCountry : histCountry;
-  const stateRows   = isProjected ? projState   : histState;
   const seasons     = slide10Season === "annual" ? ["winter", "summer"] : [slide10Season];
 
-  // Helper: average a value across both seasons per key
+  // Helper: average a value across the active season(s) per key, for a given year+rows
   function buildAnnualMap(rows, year, keyField, valField) {
     const acc = new Map();
     seasons.forEach(s => {
@@ -1525,48 +1666,79 @@ async function renderSlide10Map(histCountry, projCountry, histState, projState, 
     return new Map([...acc].map(([k, { sum, n }]) => [k, sum / n]));
   }
 
-  // Current year country temps
-  const tempMap     = buildAnnualMap(countryRows, slide10Year, "country", "mean_temp");
-  // 1850 baseline country temps
+  // 1850 historical baseline (always from histCountry / histState)
   const baseCountryMap = buildAnnualMap(histCountry, 1850, "country", "mean_temp");
+  const baseStateMap   = buildAnnualMap(histState,   1850, "state",   "mean_temp_c");
 
-  // Current year state temps
-  const currStateMap = buildAnnualMap(stateRows, slide10Year, "state", "mean_temp_c");
-  // 1850 baseline state temps
-  const baseStateMap = buildAnnualMap(histState, 1850, "state", "mean_temp_c");
+  // For projected years we bridge the dataset gap by computing per-entity offsets at the
+  // handoff year (last historical-only year, typically 2014). offset = hist[handoff] - proj[handoff].
+  // Since SSP245 starts at 2015 and has no 2014 data, projAtHandoff will be empty → offset = 0.
+  // This is correct: both datasets use the same absolute °C scale, so anomaly =
+  // projTemp - hist1850 is already well-defined without any correction.
+  let countryOffsetMap = new Map();
+  let stateOffsetMap   = new Map();
+  if (isProjected) {
+    const histAtHandoff = buildAnnualMap(histCountry, histMaxYear, "country", "mean_temp");
+    const projAtHandoff = buildAnnualMap(projCountry, histMaxYear, "country", "mean_temp");
+    histAtHandoff.forEach((hv, k) => {
+      const pv = projAtHandoff.get(k);
+      if (pv != null) countryOffsetMap.set(k, hv - pv);
+    });
 
-  // State diff: current − 1850
+    const histStateHandoff = buildAnnualMap(histState, histMaxYear, "state", "mean_temp_c");
+    const projStateHandoff = buildAnnualMap(projState, histMaxYear, "state", "mean_temp_c");
+    histStateHandoff.forEach((hv, k) => {
+      const pv = projStateHandoff.get(k);
+      if (pv != null) stateOffsetMap.set(k, hv - pv);
+    });
+  }
+
+  // Current year temps (from the appropriate dataset)
+  const currCountryRows = isProjected ? projCountry : histCountry;
+  const currStateRows   = isProjected ? projState   : histState;
+  const tempMap      = buildAnnualMap(currCountryRows, slide10Year, "country", "mean_temp");
+  const currStateMap = buildAnnualMap(currStateRows,   slide10Year, "state",   "mean_temp_c");
+
+  // State anomaly map: apply offset if projected, then subtract 1850 baseline
   const stateTempMap = new Map();
   currStateMap.forEach((curr, state) => {
-    const base = baseStateMap.get(state);
-    if (base != null) stateTempMap.set(state, curr - base);
+    const offset = isProjected ? (stateOffsetMap.get(state) ?? 0) : 0;
+    const base   = baseStateMap.get(state);
+    if (base != null) stateTempMap.set(state, (curr + offset) - base);
   });
 
-  // Annotate geo features with country diff
+  // Annotate geo features with bridged country anomaly
   geoDataGlobal.features.forEach(f => {
-    const name = nameFixes[f.properties.name] ?? f.properties.name;
-    const curr = tempMap.get(name) ?? null;
-    const base = baseCountryMap.get(name) ?? null;
-    f.properties.temperature = (curr != null && base != null) ? curr - base : null;
+    const name   = nameFixes[f.properties.name] ?? f.properties.name;
+    const curr   = tempMap.get(name) ?? null;
+    const offset = isProjected ? (countryOffsetMap.get(name) ?? 0) : 0;
+    const base   = baseCountryMap.get(name) ?? null;
+    f.properties.temperature = (curr != null && base != null) ? (curr + offset) - base : null;
   });
 
   if (slide10Level === "us") {
+    const usName = "United States of America";
     const usCountryDiff = (() => {
-      const c = tempMap.get("United States of America");
-      const b = baseCountryMap.get("United States of America");
-      return c != null && b != null ? c - b : null;
+      const c = tempMap.get(usName);
+      const offset = isProjected ? (countryOffsetMap.get(usName) ?? 0) : 0;
+      const b = baseCountryMap.get(usName);
+      return c != null && b != null ? (c + offset) - b : null;
     })();
     await renderSlide10US(usCountryDiff, stateTempMap);
   } else if (slide10Level === "countries") {
     renderSlide10Countries();
   } else if (slide10Level === "global") {
-    const vals = seasons.flatMap(s =>
-      (isProjected ? projCountry : histCountry)
+    // Bridged global average
+    const currVals = seasons.flatMap(s =>
+      currCountryRows
         .filter(r => +r.year === slide10Year && r.season === s)
-        .map(r => +r.mean_temp)
-        .filter(v => !isNaN(v))
+        .map(r => ({ country: r.country, v: +r.mean_temp }))
+        .filter(d => !isNaN(d.v))
     );
-    const avg = vals.length ? d3.mean(vals) : null;
+    const avg = currVals.length ? d3.mean(currVals, d => {
+      const offset = isProjected ? (countryOffsetMap.get(d.country) ?? 0) : 0;
+      return d.v + offset;
+    }) : null;
 
     const baseVals = seasons.flatMap(s =>
       histCountry
@@ -1694,7 +1866,7 @@ function renderSlide10Global(avgTemp) {
 
     const width  = container.clientWidth  || 700;
     const height = container.clientHeight || 280;
-    const proj = d3.geoNaturalEarth1().scale(width / 5.2).translate([width / 2, height / 2]);
+    const proj = d3.geoNaturalEarth1().scale(width / 5.6).translate([width / 2, height / 2]);
 
     d3.select("#us-map-10-map").append("svg")
       .attr("viewBox", `0 0 ${width} ${height}`)
@@ -1868,14 +2040,45 @@ async function renderSlide10DetailChart() {
   const globalHist = globalSeries(gHist);
   const globalProj = globalSeries(gProj);
 
-  // compute anomalies vs 1850 for each series independently
+  // Compute anomalies vs 1850, bridging the projected series to the historical scale.
+  // Bridge offset = hist[handoffYear] - proj[handoffYear], computed per entity.
+  // This ensures the projected line is continuous with the historical line.
   const baselineOf = arr => arr.find(d => d.year === 1850)?.temp ?? arr[0]?.temp ?? 0;
   const entBase = baselineOf(entityHist);
   const glbBase = baselineOf(globalHist);
+
+  // Find the last year present in both hist and proj series (the handoff year)
+  // Find the last year present in hist but NOT in proj (the true handoff year).
+  // Using a year present in both would bridge hist's noisy observed value against
+  // the model's smooth projection for that same year, producing a large spurious offset.
+  const entHistYears = new Set(entityHist.map(d => d.year));
+  const entProjYears = new Set(entityProj.map(d => d.year));
+  const entExclusive = [...entHistYears].filter(y => !entProjYears.has(y));
+  const entHandoff   = entExclusive.length ? Math.max(...entExclusive) : null;
+
+  let entProjOffset = 0;
+  if (entHandoff != null) {
+    const hv = entityHist.find(d => d.year === entHandoff)?.temp;
+    const pv = entityProj.find(d => d.year === entHandoff)?.temp;
+    if (hv != null && pv != null) entProjOffset = hv - pv;
+  }
+
+  const glbHistYears = new Set(globalHist.map(d => d.year));
+  const glbProjYears = new Set(globalProj.map(d => d.year));
+  const glbExclusive = [...glbHistYears].filter(y => !glbProjYears.has(y));
+  const glbHandoff   = glbExclusive.length ? Math.max(...glbExclusive) : null;
+
+  let glbProjOffset = 0;
+  if (glbHandoff != null) {
+    const hv = globalHist.find(d => d.year === glbHandoff)?.temp;
+    const pv = globalProj.find(d => d.year === glbHandoff)?.temp;
+    if (hv != null && pv != null) glbProjOffset = hv - pv;
+  }
+
   const eH = entityHist.map(d => ({ year: d.year, anomaly: d.temp - entBase }));
-  const eP = entityProj.map(d => ({ year: d.year, anomaly: d.temp - entBase }));
+  const eP = entityProj.map(d => ({ year: d.year, anomaly: (d.temp + entProjOffset) - entBase }));
   const gH = globalHist.map(d => ({ year: d.year, anomaly: d.temp - glbBase }));
-  const gP = globalProj.map(d => ({ year: d.year, anomaly: d.temp - glbBase }));
+  const gP = globalProj.map(d => ({ year: d.year, anomaly: (d.temp + glbProjOffset) - glbBase }));
 
   // ---- DRAW ----
   container.style.display = "block";
