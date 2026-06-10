@@ -1523,11 +1523,15 @@ async function slideTenUSStates() {
   _s10InvalidateLevel();
   await ensureBaseData();
 
-  const [histCountry, projCountry, histState, projState] = await Promise.all([
+  const [histCountry, projCountry, histState, projState, globalYearlyHist, globalYearlyProj, globalSeasonHist, globalSeasonProj] = await Promise.all([
     ensureSeasonalData("country", "historical"),
     ensureSeasonalData("country", "ssp245"),
     loadStateRows("historical"),
     loadStateRows("ssp245"),
+    d3.csv("data/yearly_global_temp_historical.csv"),
+    d3.csv("data/yearly_global_temp_ssp245.csv"),
+    ensureSeasonalData("global", "historical"),
+    ensureSeasonalData("global", "ssp245"),
   ]);
 
   const histYears = [...new Set(histCountry.map(r => +r.year))].sort((a, b) => a - b);
@@ -1547,7 +1551,7 @@ async function slideTenUSStates() {
   // Expose a re-render hook so click handlers in renderers can re-render
   // the map to update the selection outline.
   window.__slide10ReRender = () =>
-    renderSlide10Map(histCountry, projCountry, histState, projState, histMax);
+    renderSlide10Map(histCountry, projCountry, histState, projState, histMax, globalYearlyHist, globalYearlyProj, globalSeasonHist, globalSeasonProj);
 
   // slider
   const slider = document.getElementById("year-slider-10");
@@ -1568,7 +1572,7 @@ async function slideTenUSStates() {
       if (_raf10) return;         // already a frame pending — skip redundant renders
       _raf10 = requestAnimationFrame(() => {
         _raf10 = null;
-        renderSlide10Map(histCountry, projCountry, histState, projState, histMax);
+        renderSlide10Map(histCountry, projCountry, histState, projState, histMax, globalYearlyHist, globalYearlyProj, globalSeasonHist, globalSeasonProj);
       });
     };
 
@@ -1578,7 +1582,7 @@ async function slideTenUSStates() {
       if (label) label.textContent = slide10Year;
       if (src)   src.textContent = slide10Year > histMax ? "Projected (SSP2-4.5)" : "Historical (CMIP6)";
       updateChartYearMarker();
-      renderSlide10Map(histCountry, projCountry, histState, projState, histMax);
+      renderSlide10Map(histCountry, projCountry, histState, projState, histMax, globalYearlyHist, globalYearlyProj, globalSeasonHist, globalSeasonProj);
     }
     document.getElementById("step-10-back5")?.addEventListener("click", () => stepYear10(-5));
     document.getElementById("step-10-back1")?.addEventListener("click", () => stepYear10(-1));
@@ -1594,7 +1598,7 @@ async function slideTenUSStates() {
     slide10Season = val;
     [wBtn, sBtn, aBtn].forEach(b => b?.classList.remove("active"));
     btnOn?.classList.add("active");
-    renderSlide10Map(histCountry, projCountry, histState, projState, histMax);
+    renderSlide10Map(histCountry, projCountry, histState, projState, histMax, globalYearlyHist, globalYearlyProj, globalSeasonHist, globalSeasonProj);
     updateTradeoffHighlight();
     if (slide10Selected) renderSlide10DetailChart();
   };
@@ -1613,14 +1617,14 @@ async function slideTenUSStates() {
     _s10InvalidateLevel();
     [usLvlBtn, ctrLvlBtn, glbLvlBtn].forEach(b => b?.classList.remove("active"));
     btnOn?.classList.add("active");
-    renderSlide10Map(histCountry, projCountry, histState, projState, histMax);
+    renderSlide10Map(histCountry, projCountry, histState, projState, histMax, globalYearlyHist, globalYearlyProj, globalSeasonHist, globalSeasonProj);
     updateTradeoffHighlight();
   };
   usLvlBtn?.addEventListener("click",  () => setLevel("us",        usLvlBtn));
   ctrLvlBtn?.addEventListener("click", () => setLevel("countries", ctrLvlBtn));
   glbLvlBtn?.addEventListener("click", () => setLevel("global",    glbLvlBtn));
 
-  renderSlide10Map(histCountry, projCountry, histState, projState, histMax);
+  renderSlide10Map(histCountry, projCountry, histState, projState, histMax, globalYearlyHist, globalYearlyProj, globalSeasonHist, globalSeasonProj);
   updateTradeoffHighlight();
 }
 
@@ -1646,7 +1650,8 @@ function updateTradeoffHighlight() {
 }
  
 // Top-level render dispatcher — picks the right view for current level
-async function renderSlide10Map(histCountry, projCountry, histState, projState, histMaxYear) {
+async function renderSlide10Map(histCountry, projCountry, histState, projState, histMaxYear, globalYearlyHist = [], globalYearlyProj = [], globalSeasonHist = [], globalSeasonProj = []) {
+
   const isProjected = slide10Year > histMaxYear;
   const seasons     = slide10Season === "annual" ? ["winter", "summer"] : [slide10Season];
 
@@ -1728,27 +1733,25 @@ async function renderSlide10Map(histCountry, projCountry, histState, projState, 
   } else if (slide10Level === "countries") {
     renderSlide10Countries();
   } else if (slide10Level === "global") {
-    // Bridged global average
-    const currVals = seasons.flatMap(s =>
-      currCountryRows
-        .filter(r => +r.year === slide10Year && r.season === s)
-        .map(r => ({ country: r.country, v: +r.mean_temp }))
-        .filter(d => !isNaN(d.v))
-    );
-    const avg = currVals.length ? d3.mean(currVals, d => {
-      const offset = isProjected ? (countryOffsetMap.get(d.country) ?? 0) : 0;
-      return d.v + offset;
-    }) : null;
+    let anomaly = null;
 
-    const baseVals = seasons.flatMap(s =>
-      histCountry
-        .filter(r => +r.year === 1850 && r.season === s)
-        .map(r => +r.mean_temp)
-        .filter(v => !isNaN(v))
-    );
-    const baseAvg = baseVals.length ? d3.mean(baseVals) : null;
+    if (slide10Season === "annual") {
+      const yearlyRows = isProjected ? globalYearlyProj : globalYearlyHist;
+      const yearRow    = yearlyRows.find(r => +r.year === slide10Year);
+      const baseRow    = globalYearlyHist.find(r => +r.year === 1850);
+      anomaly = (yearRow && baseRow)
+        ? +yearRow.mean_temp - +baseRow.mean_temp
+        : null;
+    } else {
+      // Winter or summer: use seasonal_global_temp_*
+      const seasonRows = isProjected ? globalSeasonProj : globalSeasonHist;
+      const currRow    = seasonRows.find(r => +r.year === slide10Year && r.season === slide10Season);
+      const baseRow    = globalSeasonHist.find(r => +r.year === 1850    && r.season === slide10Season);
+      anomaly = (currRow && baseRow)
+        ? +currRow.mean_temp - +baseRow.mean_temp
+        : null;
+    }
 
-    const anomaly = (avg != null && baseAvg != null) ? avg - baseAvg : null;
     renderSlide10Global(anomaly);
   }
 }
