@@ -533,19 +533,59 @@ async function slideOneMap() {
   d3.select("#map").html("");
   await ensureBaseData();
   initMapOne();
+
+  const YEAR_START = 1851;
+  const YEAR_END   = 2014;   // historical only — no projections
+
+  // Eased delay per year: fast through the middle, slower at the end
+  // so the recent acceleration gets time to register visually.
+  function delayForYear(year) {
+    const t = (year - YEAR_START) / (YEAR_END - YEAR_START); // 0 -> 1
+    const eased = t * t;                   // ease-in: spend more time on later years
+    return 40 + eased * 180;              // 40 ms early, up to 220 ms near 2014
+  }
+
+  currentYear = YEAR_START;
   updateMapOne(currentYear);
 
-  const slider = document.getElementById("year-slider");
-  const label  = document.getElementById("year-label");
-  if (slider && label) {
-    label.textContent = currentYear;
-    slider.value = currentYear;
-    slider.oninput = e => {
-      currentYear = +e.target.value;
-      label.textContent = currentYear;
-      updateMapOne(currentYear);
-    };
+  const label   = document.getElementById("year-label");
+  const readout = document.getElementById("globe-temp-readout");
+  if (label) label.textContent = currentYear;
+
+  let cancelled = false;
+  window._slide1AnimCancel = () => { cancelled = true; };
+
+  function step() {
+    if (cancelled) return;
+
+    if (label)   label.textContent = currentYear;
+    if (readout) {
+      const t = globalDataState.averageTemperature;
+      readout.textContent = t != null
+        ? `Global anomaly vs 1850: ${t >= 0 ? "+" : ""}${t.toFixed(2)} °C`
+        : "Animating through years…";
+    }
+
+    updateMapOne(currentYear);
+
+    if (currentYear < YEAR_END) {
+      const delay = delayForYear(currentYear);
+      currentYear++;
+      setTimeout(step, delay);
+    } else {
+      // Hold on the final year — animation complete
+      if (readout) {
+        const t = globalDataState.averageTemperature;
+        readout.textContent = t != null
+          ? `By 2014: ${t >= 0 ? "+" : ""}${t.toFixed(2)} °C vs 1850`
+          : "Animation complete";
+      }
+      window._slide1AnimCancel = null;
+    }
   }
+
+  // Short lead-in pause before starting so the slide transition settles
+  setTimeout(step, 600);
 }
 
 function initMapOne() {
