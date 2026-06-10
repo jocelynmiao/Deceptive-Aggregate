@@ -204,7 +204,7 @@ const slides = [
   {
   label: "Is This Enough?",
   content: `
-    <div class="text-slide question-slide">
+    <div class="text-slide question-slide slide6-layout">
       <p class="eyebrow">Slide 06 — Reflection</p>
       <h1>It's not that they're wrong.<br>They were just<br><em>built for someone else.</em></h1>
  
