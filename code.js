@@ -1358,7 +1358,7 @@ const slide10StateCache = { historical: null, ssp245: null };
 async function slideTenUSStates() {
   d3.select("#us-map-10-map").html("");
   hideDetailChart();
-  _s10InvalidateLevel();   // entering the slide fresh — force SVG rebuild
+  _s10InvalidateLevel();
   await ensureBaseData();
 
   const [histCountry, projCountry, histState, projState] = await Promise.all([
@@ -1389,12 +1389,17 @@ async function slideTenUSStates() {
     slider.value = slide10Year;
     if (label) label.textContent = slide10Year;
     if (src)   src.textContent = slide10Year > histMax ? "Projected (SSP2-4.5)" : "Historical (CMIP6)";
+    let _raf10 = null;
     slider.oninput = e => {
       slide10Year = +e.target.value;
       if (label) label.textContent = slide10Year;
       if (src)   src.textContent = slide10Year > histMax ? "Projected (SSP2-4.5)" : "Historical (CMIP6)";
-      renderSlide10Map(histCountry, projCountry, histState, projState, histMax);
       updateChartYearMarker();    // cheap update — moves the vertical line only
+      if (_raf10) return;         // already a frame pending — skip redundant renders
+      _raf10 = requestAnimationFrame(() => {
+        _raf10 = null;
+        renderSlide10Map(histCountry, projCountry, histState, projState, histMax);
+      });
     };
   }
 
@@ -1420,9 +1425,9 @@ async function slideTenUSStates() {
   const glbLvlBtn = document.getElementById("btn-10-global");
   const setLevel = (val, btnOn) => {
     slide10Level = val;
-    slide10Selected = null;       // changing level clears any current selection
+    slide10Selected = null;
     hideDetailChart();
-    _s10InvalidateLevel();        // force SVG rebuild for the new level
+    _s10InvalidateLevel();
     [usLvlBtn, ctrLvlBtn, glbLvlBtn].forEach(b => b?.classList.remove("active"));
     btnOn?.classList.add("active");
     renderSlide10Map(histCountry, projCountry, histState, projState, histMax);
@@ -1536,33 +1541,27 @@ async function renderSlide10Map(histCountry, projCountry, histState, projState, 
   }
 }
  
-// ---- Slide-10 renderer state ----
-// Each renderer is split into init (build SVG once) + update (mutate fills/strokes).
-// The SVG is only rebuilt when the level changes or the container has been cleared.
+// ── Slide-10 renderer state ──────────────────────────────────────────────────
+// SVG is built once per level; slider/season changes only mutate fills & strokes.
+let _s10LastLevel   = null;   // which level's SVG is currently live
+let _s10StatesGeo   = null;   // us-states.geojson cached after first fetch
 
-let _s10USStatesGeo   = null;   // cached us-states.geojson — never re-fetched
-let _s10LastLevel     = null;   // tracks which level's SVG is currently in the container
-
-// Invalidate the cached level so the next render call rebuilds from scratch.
-// Call this when the slide is first entered or the level button is clicked.
 function _s10InvalidateLevel() { _s10LastLevel = null; }
 
-// renderer — US zoomed, state outlines on top
-// Builds the SVG once; on re-calls just updates fills and selection strokes.
+// renderer — US states
 async function renderSlide10US(usTemp, stateTempMap) {
   const container = document.querySelector("#us-map-10-map");
   if (!container) return;
 
   const color = anomalyColor(-1, 0, 3);
 
-  // ── INIT (first call for this level) ──────────────────────────────────────
+  // ── INIT (once per level) ─────────────────────────────────────────────────
   if (_s10LastLevel !== "us") {
     d3.select("#us-map-10-map svg").remove();
     _s10LastLevel = "us";
 
     const width  = container.clientWidth  || 700;
     const height = container.clientHeight || 280;
-
     const usFeature = geoDataGlobal.features.find(isUS);
     if (!usFeature) return;
 
@@ -1579,76 +1578,60 @@ async function renderSlide10US(usTemp, stateTempMap) {
       .attr("width", "100%").attr("height", "100%");
 
     svg.selectAll(".country-bg")
-      .data(geoDataGlobal.features)
-      .join("path")
-      .attr("class", "country-bg")
-      .attr("d", path)
-      .attr("fill", "#1a1a1a")
-      .attr("stroke", "#111").attr("stroke-width", 0.3)
+      .data(geoDataGlobal.features).join("path")
+      .attr("class", "country-bg").attr("d", path)
+      .attr("fill", "#1a1a1a").attr("stroke", "#111").attr("stroke-width", 0.3)
       .attr("opacity", f => isUS(f) ? 0 : 0.04);
 
-    svg.append("path")
-      .attr("class", "us-outline")
-      .datum(usFeature)
-      .attr("d", path)
+    svg.append("path").attr("class", "us-outline")
+      .datum(usFeature).attr("d", path)
       .attr("fill", "#2a2a2a")
       .attr("stroke", "rgba(255,255,255,0.25)").attr("stroke-width", 0.5);
 
-    // Load states geojson once and cache it
-    if (!_s10USStatesGeo) {
-      try { _s10USStatesGeo = await d3.json("data/us-states.geojson"); }
+    // Fetch states once, cache forever
+    if (!_s10StatesGeo) {
+      try { _s10StatesGeo = await d3.json("data/us-states.geojson"); }
       catch (e) { return; }
     }
-    const statesGeo = _s10USStatesGeo;
-    if (!statesGeo) return;
 
     svg.selectAll(".state")
-      .data(statesGeo.features)
-      .join("path")
-      .attr("class", "state")
-      .attr("d", path)
-      .attr("cursor", "pointer")
-      .attr("opacity", 0)
-      .on("mousemove", (event, f) => {
-        // Read fill data from the live stateTempMap closure in the UPDATE section below.
-        // We re-attach this handler on every update so it always closes over the latest map.
-      })
+      .data(_s10StatesGeo.features).join("path")
+      .attr("class", "state").attr("d", path)
+      .attr("cursor", "pointer").attr("opacity", 0)
       .on("mouseleave", hideTip)
-      .on("click", () => {})   // placeholder — wired in update
-      .transition().duration(500).attr("opacity", 1);
+      .transition().duration(400).attr("opacity", 1);
   }
 
-  // ── UPDATE (every call including the first, after init) ───────────────────
+  // ── UPDATE (every call) ───────────────────────────────────────────────────
   const svg = d3.select("#us-map-10-map svg");
   if (svg.empty()) return;
 
   const isSelected = f =>
-    slide10Selected && slide10Selected.level === "us" &&
-    slide10Selected.name === f.properties.name;
+    slide10Selected?.level === "us" && slide10Selected.name === f.properties.name;
 
   svg.selectAll(".state")
     .attr("fill", f => {
       const t = stateTempMap.get(f.properties.name);
       return t != null ? color(t) : "rgba(255,255,255,0.04)";
     })
-    .attr("stroke", f => isSelected(f) ? "#ffffff" : "rgba(255,255,255,0.45)")
+    .attr("stroke",       f => isSelected(f) ? "#ffffff" : "rgba(255,255,255,0.45)")
     .attr("stroke-width", f => isSelected(f) ? 2.2 : 0.7)
     .on("mousemove", (event, f) => {
       const t = stateTempMap.get(f.properties.name);
-      const seasonLbl = slide10Season === "annual" ? "Annual avg"
+      const lbl = slide10Season === "annual" ? "Annual avg"
         : slide10Season === "winter" ? "Winter" : "Summer";
       showTip(event,
         `<strong>${f.properties.name}</strong>` +
         (t != null
-          ? `<br>${slide10Year} ${seasonLbl}: ${t >= 0 ? "+" : ""}${t.toFixed(1)} °C vs 1850<br><span style="opacity:0.6;font-size:0.7rem;">Click to see trajectory</span>`
-          : `<br><span style="opacity:0.7;">No data for ${f.properties.name}</span>`)
+          ? `<br>${slide10Year} ${lbl}: ${t >= 0 ? "+" : ""}${t.toFixed(1)} °C vs 1850` +
+            `<br><span style="opacity:0.6;font-size:0.7rem;">Click to see trajectory</span>`
+          : `<br><span style="opacity:0.7;">No data</span>`)
       );
     })
     .on("click", (event, f) => {
       const name = f.properties.name;
-      if (slide10Selected && slide10Selected.name === name && slide10Selected.level === "us") {
-        slide10Selected = null;
-        hideDetailChart();
+      if (slide10Selected?.name === name && slide10Selected.level === "us") {
+        slide10Selected = null; hideDetailChart();
       } else if (stateTempMap.get(name) != null) {
         slide10Selected = { name, level: "us" };
         renderSlide10DetailChart();
@@ -1657,8 +1640,7 @@ async function renderSlide10US(usTemp, stateTempMap) {
     });
 }
 
-
-// renderer — single merged landmass colored by global seasonal average (mirrors slide 1)
+// renderer — global single landmass
 function renderSlide10Global(avgTemp) {
   const container = document.querySelector("#us-map-10-map");
   if (!container) return;
@@ -1672,20 +1654,13 @@ function renderSlide10Global(avgTemp) {
 
     const width  = container.clientWidth  || 700;
     const height = container.clientHeight || 280;
+    const proj = d3.geoNaturalEarth1().scale(width / 5.2).translate([width / 2, height / 2]);
 
-    const proj = d3.geoNaturalEarth1()
-      .scale(width / 5.2)
-      .translate([width / 2, height / 2]);
-
-    const svg = d3.select("#us-map-10-map").append("svg")
+    d3.select("#us-map-10-map").append("svg")
       .attr("viewBox", `0 0 ${width} ${height}`)
-      .attr("width", "100%").attr("height", "100%");
-
-    svg.append("path")
-      .attr("class", "global-landmass")
-      .datum(geoDataGlobal)
-      .attr("d", d3.geoPath(proj))
-      .attr("stroke", "none");
+      .attr("width", "100%").attr("height", "100%")
+      .append("path").attr("class", "global-landmass")
+      .datum(geoDataGlobal).attr("d", d3.geoPath(proj)).attr("stroke", "none");
   }
 
   // ── UPDATE ────────────────────────────────────────────────────────────────
@@ -1700,6 +1675,7 @@ function renderSlide10Global(avgTemp) {
     .on("mouseleave", hideTip);
 }
 
+// renderer — countries world map
 function renderSlide10Countries() {
   const container = document.querySelector("#us-map-10-map");
   if (!container) return;
@@ -1713,19 +1689,14 @@ function renderSlide10Countries() {
 
     const width  = container.clientWidth  || 700;
     const height = container.clientHeight || 280;
+    const proj = d3.geoNaturalEarth1().scale(width / 5.6).translate([width / 2, height / 2]);
+    const path = d3.geoPath(proj);
 
-    const projection = d3.geoNaturalEarth1().scale(width / 5.6).translate([width / 2, height / 2]);
-    const path = d3.geoPath(projection);
-
-    const svg = d3.select("#us-map-10-map").append("svg")
+    d3.select("#us-map-10-map").append("svg")
       .attr("viewBox", `0 0 ${width} ${height}`)
-      .attr("width", "100%").attr("height", "100%");
-
-    svg.selectAll("path")
-      .data(geoDataGlobal.features)
-      .join("path")
-      .attr("d", path)
-      .attr("cursor", "pointer");
+      .attr("width", "100%").attr("height", "100%")
+      .selectAll("path").data(geoDataGlobal.features).join("path")
+      .attr("d", path).attr("cursor", "pointer");
   }
 
   // ── UPDATE ────────────────────────────────────────────────────────────────
@@ -1733,31 +1704,30 @@ function renderSlide10Countries() {
   if (svg.empty()) return;
 
   const isSelected = f =>
-    slide10Selected && slide10Selected.level === "countries" &&
+    slide10Selected?.level === "countries" &&
     (f.properties.name === slide10Selected.name ||
      (nameFixes[f.properties.name] ?? f.properties.name) === slide10Selected.name);
 
   svg.selectAll("path")
     .attr("fill", f => f.properties.temperature == null
-      ? "rgba(255,255,255,0.06)"
-      : color(f.properties.temperature))
-    .attr("stroke", f => isSelected(f) ? "#ffffff" : "rgba(255,255,255,0.15)")
+      ? "rgba(255,255,255,0.06)" : color(f.properties.temperature))
+    .attr("stroke",       f => isSelected(f) ? "#ffffff" : "rgba(255,255,255,0.15)")
     .attr("stroke-width", f => isSelected(f) ? 1.6 : 0.4)
     .on("mousemove", (event, f) => {
       const t = f.properties.temperature;
       showTip(event,
         `<strong>${f.properties.name}</strong><br>` +
         (t != null
-          ? `${t >= 0 ? "+" : ""}${t.toFixed(2)} °C vs 1850<br><span style="opacity:0.6;font-size:0.7rem;">Click to see trajectory</span>`
+          ? `${t >= 0 ? "+" : ""}${t.toFixed(2)} °C vs 1850` +
+            `<br><span style="opacity:0.6;font-size:0.7rem;">Click to see trajectory</span>`
           : "No data")
       );
     })
     .on("mouseleave", hideTip)
     .on("click", (event, f) => {
       const canonical = nameFixes[f.properties.name] ?? f.properties.name;
-      if (slide10Selected && slide10Selected.name === canonical && slide10Selected.level === "countries") {
-        slide10Selected = null;
-        hideDetailChart();
+      if (slide10Selected?.name === canonical && slide10Selected.level === "countries") {
+        slide10Selected = null; hideDetailChart();
       } else if (f.properties.temperature != null) {
         slide10Selected = { name: canonical, level: "countries" };
         renderSlide10DetailChart();
