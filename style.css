@@ -680,6 +680,13 @@ body {
   grid-template-columns: 320px 1fr;
 }
 
+/* Slide 10 text panel needs to scroll and clear the nav buttons */
+.slide-layout-wide .text-panel {
+  overflow-y: auto;
+  max-height: 100%;
+  padding-bottom: 120px;
+}
+
 .tradeoff-list {
   display: flex;
   flex-direction: column;
@@ -887,7 +894,13 @@ body {
   min-height: 100%;
 
   padding-top: 30px;
-  padding-bottom: 24px;
+  padding-bottom: 120px;
+}
+
+/* #content uses justify-content:center which swallows child padding-bottom.
+   Override it so slide 6 flows from the top and the bottom padding is respected. */
+#content:has(.slide6-layout) {
+  justify-content: flex-start;
 }
 .slide6-layout .lead {
   font-size: 1rem;

@@ -245,7 +245,7 @@ const slides = [
         So what happens if we look deeper at the seasons people <em>actually experience</em> —
         the winters that keep getting shorter, the summers that keep getting hotter?
       </p>
-      <div style="height:100px;"></div>
+      <div style="height:180px;"></div>
     </div>`
   },
   // Slide 7
@@ -433,7 +433,7 @@ const slides = [
           </div>
         </div>
  
-        <div style="height:100px;"></div>
+        <div style="height:180px;"></div>
       </div>
       <div id="us-map-10" style="flex:1;min-height:420px;display:flex;flex-direction:column;gap:12px;">
         <div id="us-map-10-map" style="flex:1;min-height:280px;position:relative;"></div>
@@ -460,26 +460,41 @@ function render(direction = 1) {
   document.getElementById("restart-btn").style.display = currentSlide === slides.length - 1 ? "inline-flex" : "none";
 
   const contentEl = document.getElementById("content");
-  contentEl.classList.remove("visible");
-  contentEl.style.transform = `translateX(${direction > 0 ? "40px" : "-40px"})`;
 
-  requestAnimationFrame(() => {
+  // Step 1: slide the old content out in the opposite direction
+  const exitX = direction > 0 ? "-60px" : "60px";
+  contentEl.style.transition = "transform 0.3s ease-in, opacity 0.3s ease-in";
+  contentEl.style.transform = `translateX(${exitX})`;
+  contentEl.style.opacity = "0";
+
+  setTimeout(() => {
+    // Step 2: inject new content, position it off-screen on the entry side
+    contentEl.innerHTML = slide.content;
+    const enterX = direction > 0 ? "60px" : "-60px";
+    contentEl.style.transition = "none";
+    contentEl.style.transform = `translateX(${enterX})`;
+    contentEl.style.opacity = "0";
+
+    // Step 3: trigger the slide-in on the next frame
     requestAnimationFrame(() => {
-      contentEl.innerHTML = slide.content;
-      contentEl.style.transform = "";
-      contentEl.classList.add("visible");
+      requestAnimationFrame(() => {
+        contentEl.style.transition = "transform 0.38s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.38s ease-out";
+        contentEl.style.transform = "translateX(0)";
+        contentEl.style.opacity = "1";
+        contentEl.classList.add("visible");
 
-      if (slide.label === "Overall Global Temperature") slideOneMap();
-      if (slide.label === "Global Temperature Trend") slideTwoChart();
-      if (slide.label === "Country-Level Breakdown") slideThreeMap();
-      if (slide.label === "Zooming Into the U.S.") slideFourUS();
-      if (slide.label === "U.S. Temperatures by 2014") slideFiveUS();
-      if (slide.label === "Winter vs Summer — World") slideSevenWorld();
-      if (slide.label === "U.S. Winter Projections") slideEightUSWinter();
-      if (slide.label === "U.S. Summer Projections") slideNineUSSummer();
-      if (slide.label === "Visualization Tradeoffs") slideTenUSStates();
+        if (slide.label === "Overall Global Temperature") slideOneMap();
+        if (slide.label === "Global Temperature Trend") slideTwoChart();
+        if (slide.label === "Country-Level Breakdown") slideThreeMap();
+        if (slide.label === "Zooming Into the U.S.") slideFourUS();
+        if (slide.label === "U.S. Temperatures by 2014") slideFiveUS();
+        if (slide.label === "Winter vs Summer — World") slideSevenWorld();
+        if (slide.label === "U.S. Winter Projections") slideEightUSWinter();
+        if (slide.label === "U.S. Summer Projections") slideNineUSSummer();
+        if (slide.label === "Visualization Tradeoffs") slideTenUSStates();
+      });
     });
-  });
+  }, 300); // wait for exit animation to finish
 }
 
 function changeSlide(dir) {
