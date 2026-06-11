@@ -54,9 +54,18 @@ const slides = [
           Here we examine how the way we visualize climate change<br>
           shapes — and sometimes obscures — our understanding of the phenomenon.
         </p>
-        <p style="margin-top:60px;font-family:var(--font-ui);font-size:0.72rem;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted);">
-          Press <strong style="color:var(--accent);">Next</strong> or → to begin
-        </p>
+        <div style="margin-top:60px;display:flex;flex-direction:column;align-items:center;gap:10px;">
+          <p style="font-family:var(--font-ui);font-size:0.78rem;letter-spacing:0.18em;text-transform:uppercase;color:var(--text);opacity:0.75;margin:0;">
+            Press <strong style="color:var(--accent);font-size:0.88rem;letter-spacing:0.1em;">Next</strong> or <kbd style="display:inline-block;padding:1px 7px;border:1px solid var(--accent);border-radius:3px;font-family:var(--font-ui);font-size:0.78rem;color:var(--accent);background:rgba(0,132,180,0.08);letter-spacing:0.04em;">→</kbd> to begin
+          </p>
+          <div style="color:var(--accent);font-size:1.4rem;animation:nudge 1.6s ease-in-out infinite;">›</div>
+        </div>
+        <style>
+          @keyframes nudge {
+            0%, 100% { transform: translateX(0); opacity: 0.5; }
+            50% { transform: translateX(6px); opacity: 1; }
+          }
+        </style>
       </div>
     </div>`
   },
@@ -236,6 +245,7 @@ const slides = [
         So what happens if we look deeper at the seasons people <em>actually experience</em> —
         the winters that keep getting shorter, the summers that keep getting hotter?
       </p>
+      <div style="height:100px;"></div>
     </div>`
   },
   // Slide 7
@@ -248,7 +258,7 @@ const slides = [
           <h2>Winters &amp; Summers<br>Around the World</h2>
           <p>
             Looking even deeper, we can see how our seasons have changed in
-            temperatures across the world.
+            temperatures — across the world.
           </p>
           <div class="controls-box" style="margin:18px 0 0; padding:14px; border:1px solid var(--border); background:rgba(255,255,255,0.02);">
             <div style="margin-bottom:12px;">
@@ -292,7 +302,7 @@ const slides = [
         <h3>Slide 08 — U.S. Winter Trend</h3>
         <h2>U.S. Winters Are<br>Getting Warmer</h2>
         <p>
-          Like before, the Global Aggregate exhibits faster changing winters because some countries experiencing greater warming - inflate the global average as well as 1850 baseline.
+          Like before, the Global Aggregate exhibits faster changing winters because some countries experiencing greater warming — inflate the global average as well as 1850 baseline.
         </p>
         <div id="comparison-cards">
           <div class="stat-card">
@@ -423,7 +433,7 @@ const slides = [
           </div>
         </div>
  
-        
+        <div style="height:100px;"></div>
       </div>
       <div id="us-map-10" style="flex:1;min-height:420px;display:flex;flex-direction:column;gap:12px;">
         <div id="us-map-10-map" style="flex:1;min-height:280px;position:relative;"></div>
@@ -490,6 +500,20 @@ window.addEventListener("keydown", e => {
   if (e.key === "ArrowLeft" || e.key === "ArrowUp") changeSlide(-1);
 });
 document.getElementById("restart-btn").addEventListener("click", () => { currentSlide = 0; render(1); });
+
+// Preload slide 2 data in the background while the user reads slide 1,
+// so the chart renders immediately with no flicker on first navigation.
+async function preloadSlide2Data() {
+  if (!historicalData) {
+    const rows = await d3.csv("data/yearly_global_temp_historical.csv");
+    historicalData = aggregateByYear(rows);
+  }
+  if (!projectedData) {
+    const rows = await d3.csv("data/yearly_global_temp_ssp245.csv");
+    projectedData = aggregateByYear(rows);
+  }
+}
+preloadSlide2Data();
 
 // Data loaders
 

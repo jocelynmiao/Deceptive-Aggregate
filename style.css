@@ -87,7 +87,6 @@ body {
 #slide-viewport {
   position: relative;
   overflow: hidden;
-  padding-bottom: 90px;
 
 }
 
@@ -95,7 +94,7 @@ body {
   position: absolute;
   inset: 0;
   overflow-y: auto;
-  padding: 40px 60px;
+  padding: 24px 40px;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -215,7 +214,7 @@ body {
 #content p {
   font-family: var(--font-ui);
   font-size: 1.05rem;
-  line-height: 1.8;
+  line-height: 1.6;
   color: #c0bab0;
   max-width: 680px;
   margin-bottom: 1em;
@@ -411,7 +410,7 @@ body {
 .slide-layout {
   display: grid;
   grid-template-columns: 260px 1fr;
-  gap: 40px;
+  gap: 24px;
   align-items: start;
   width: 100%;
   height: 100%;
@@ -490,7 +489,7 @@ body {
 #map {
   width: 100%;
   height: 100%;
-  min-height: 440px;
+  min-height: min(440px, 52vh);
 }
 
 #map svg {
@@ -577,7 +576,7 @@ body {
 #us-map {
   width: 100%;
   height: 100%;
-  min-height: 450px;
+  min-height: min(450px, 52vh);
 }
 
 #us-map svg {
@@ -755,7 +754,7 @@ body {
 #us-map-10 {
   width: 100%;
   height: 100%;
-  min-height: 420px;
+  min-height: min(420px, 50vh);
 }
 
 #us-map-5 svg,
@@ -864,7 +863,7 @@ body {
 #map-7 {
   width: 100%;
   height: 100%;
-  min-height: 460px;
+  min-height: min(460px, 52vh);
   padding: 12px;
 }
 
@@ -888,7 +887,7 @@ body {
   min-height: 100%;
 
   padding-top: 30px;
-  padding-bottom: 140px;
+  padding-bottom: 24px;
 }
 .slide6-layout .lead {
   font-size: 1rem;
